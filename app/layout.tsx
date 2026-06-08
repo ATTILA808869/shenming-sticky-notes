@@ -28,7 +28,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <Link href="/categories">分類</Link>
               <Link href="/products">商品</Link>
               <Link href="/contact">聯絡</Link>
-              <Link href="/admin" className="text-temple-red">後台</Link>
             </nav>
             <Link href="/cart" className="btn-primary px-3">
               <ShoppingBag size={18} />
