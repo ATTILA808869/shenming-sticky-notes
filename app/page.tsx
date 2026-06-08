@@ -5,9 +5,19 @@ import { getHomeContent } from "@/lib/storefront-data";
 
 export default async function HomePage() {
   const home = await getHomeContent();
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "神明便利貼",
+    url: "https://shenming-sticky-notes.vercel.app",
+    logo: "https://shenming-sticky-notes.vercel.app/images/brand-logo.png",
+    description: "台灣味 Q 版神明文創品牌，提供便利貼、貼紙與文創設計。",
+    sameAs: ["https://www.instagram.com/shenming_note/"]
+  };
 
   return (
     <main>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       <section className="container grid min-h-[auto] items-center gap-8 py-8 sm:py-12 lg:min-h-[620px] lg:grid-cols-[1fr_0.85fr] lg:gap-10">
         <div className="order-1">
           <div className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black text-temple-red shadow-sm sm:mb-5 sm:px-4 sm:text-sm">

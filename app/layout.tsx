@@ -5,8 +5,38 @@ import { FloatingHomeButton } from "@/components/FloatingHomeButton";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "神明便利貼",
-  description: "神明便利貼品牌形象網站",
+  metadataBase: new URL("https://shenming-sticky-notes.vercel.app"),
+  title: {
+    default: "神明便利貼｜Q 版神明文創便利貼與貼紙",
+    template: "%s｜神明便利貼"
+  },
+  description: "神明便利貼是台灣味 Q 版神明文創品牌，提供可愛保庇感的便利貼、貼紙與文創設計，讓信仰陪伴日常生活。",
+  keywords: ["神明便利貼", "Q版神明", "神明貼紙", "文創便利貼", "台灣文創", "民間信仰文創"],
+  alternates: {
+    canonical: "/"
+  },
+  openGraph: {
+    title: "神明便利貼｜Q 版神明文創便利貼與貼紙",
+    description: "台灣味 Q 版神明文創品牌，讓信仰陪伴你的生活。",
+    url: "https://shenming-sticky-notes.vercel.app",
+    siteName: "神明便利貼",
+    locale: "zh_TW",
+    type: "website",
+    images: [
+      {
+        url: "/images/brand-logo.png",
+        width: 512,
+        height: 512,
+        alt: "神明便利貼品牌 Logo"
+      }
+    ]
+  },
+  twitter: {
+    card: "summary",
+    title: "神明便利貼｜Q 版神明文創便利貼與貼紙",
+    description: "台灣味 Q 版神明文創品牌，讓信仰陪伴你的生活。",
+    images: ["/images/brand-logo.png"]
+  },
   icons: {
     icon: "/icon.png",
     shortcut: "/icon.png",
