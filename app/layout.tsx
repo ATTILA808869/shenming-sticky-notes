@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ShoppingBag, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import "./globals.css";
 import { getCategories } from "@/lib/storefront-data";
 
@@ -23,16 +23,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <span className="text-lg">神明便利貼</span>
             </Link>
             <nav className="hidden items-center gap-5 text-sm font-semibold md:flex">
-              <Link href="/about">關於</Link>
-              <Link href="/blog">網誌</Link>
-              <Link href="/categories">分類</Link>
-              <Link href="/products">商品</Link>
-              <Link href="/contact">聯絡</Link>
+              <Link href="/about">關於我們</Link>
+              <Link href="/blog">文章布告</Link>
+              <Link href="/categories">商品類別</Link>
+              <Link href="/contact">聯絡我們</Link>
             </nav>
-            <Link href="/cart" className="btn-primary px-3">
-              <ShoppingBag size={18} />
-              購物車
-            </Link>
           </div>
           {categories.length > 0 ? (
             <div className="border-t border-orange-50 bg-temple-cream/70">
@@ -57,7 +52,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             </div>
             <div className="grid gap-2 text-sm">
               <strong>逛逛</strong>
-              <Link href="/products">全部商品</Link>
+              <Link href="/categories">商品類別</Link>
               <Link href="/blog">品牌網誌</Link>
               <Link href="/contact">聯絡我們</Link>
             </div>
