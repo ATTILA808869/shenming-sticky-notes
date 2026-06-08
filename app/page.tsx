@@ -29,8 +29,8 @@ export default async function HomePage() {
           </p>
           <p className="mt-4 max-w-2xl leading-7 text-neutral-600">{home?.body}</p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/products" className="btn-primary py-3">
-              逛商品
+            <Link href="https://www.instagram.com/shenming_note/" target="_blank" rel="noopener noreferrer" className="btn-primary py-3">
+              前往官方Instagram
               <ArrowRight size={18} />
             </Link>
             <Link href="/about" className="btn-secondary py-3">看品牌故事</Link>
