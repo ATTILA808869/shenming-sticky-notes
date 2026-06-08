@@ -2,9 +2,8 @@ import Image from "next/image";
 import { ExternalLink, MessageCircle } from "lucide-react";
 import { getContactContent } from "@/lib/storefront-data";
 
-const mapUrl = "https://maps.app.goo.gl/f7tfewvAZ6Lf1e1q6";
-const embedUrl = "https://www.google.com/maps?q=%E7%A5%9E%E6%98%8E%E4%BE%BF%E5%88%A9%E8%B2%BC&output=embed";
 const lineUrl = "https://lin.ee/uUvBHxK";
+const shopeeUrl = "https://tw.shp.ee/fy2WKTyh";
 
 export default async function ContactPage() {
   const contact = await getContactContent();
@@ -43,20 +42,21 @@ export default async function ContactPage() {
       </section>
 
       <section className="overflow-hidden rounded-lg border border-orange-100 bg-white shadow-soft">
-        <div className="relative aspect-square bg-temple-cream">
-          <iframe
-            src={embedUrl}
-            title="神明便利貼 Google Map"
-            className="h-full w-full border-0"
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
-          <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="absolute inset-0" aria-label="開啟 Google Maps 導航" />
-        </div>
-        <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="group flex items-center justify-between gap-3 border-t border-orange-100 p-4">
+        <a href={shopeeUrl} target="_blank" rel="noopener noreferrer" className="group block">
+          <div className="relative aspect-square bg-temple-cream">
+            <Image
+              src="/images/shopee-store.webp"
+              alt="神明便利貼蝦皮賣場"
+              fill
+              className="object-cover transition group-hover:scale-105"
+              priority
+            />
+          </div>
+        </a>
+        <a href={shopeeUrl} target="_blank" rel="noopener noreferrer" className="group flex items-center justify-between gap-3 border-t border-orange-100 p-4">
           <div>
-            <h2 className="font-black">查看地圖與導航</h2>
-            <p className="mt-1 text-sm text-neutral-600">點擊開啟 Google Maps。</p>
+            <h2 className="font-black">前往蝦皮賣場</h2>
+            <p className="mt-1 text-sm text-neutral-600">點擊圖片或按鈕前往購買。</p>
           </div>
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-temple-red text-white transition group-hover:bg-red-600">
             <ExternalLink size={18} />

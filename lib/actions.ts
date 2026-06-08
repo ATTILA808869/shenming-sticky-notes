@@ -44,7 +44,9 @@ export async function saveCategory(formData: FormData) {
     name,
     slug: text(formData, "slug") || slugify(name),
     description: text(formData, "description"),
-    imageUrl: text(formData, "imageUrl")
+    content: text(formData, "content"),
+    imageUrl: text(formData, "imageUrl"),
+    purchaseUrl: text(formData, "purchaseUrl")
   };
   if (id) await prisma.category.update({ where: { id }, data });
   else await prisma.category.create({ data });

@@ -22,7 +22,9 @@ model Category {
   name        String
   slug        String    @unique
   description String?
+  content     String?
   imageUrl    String?
+  purchaseUrl String?
   products    Product[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

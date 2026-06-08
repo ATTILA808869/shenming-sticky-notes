@@ -4,7 +4,9 @@ export const demoCategories = [
     name: "招財開運",
     slug: "fortune",
     description: "把願望貼在桌上，讓財神爺每天幫你點名。",
+    content: "適合招財、開運與日常祝福的商品系列。",
     imageUrl: "https://placehold.co/900x600/FFF1B8/2E2A27/png?text=Fortune",
+    purchaseUrl: "https://tw.shp.ee/fy2WKTyh",
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01")
   },
@@ -13,7 +15,9 @@ export const demoCategories = [
     name: "考試工作",
     slug: "study-work",
     description: "文昌帝君加班款，適合筆記、讀書、提案與靈感衝刺。",
+    content: "適合考試、工作、讀書與專注情境的商品系列。",
     imageUrl: "https://placehold.co/900x600/D9F4EA/2E2A27/png?text=Study",
+    purchaseUrl: "https://tw.shp.ee/fy2WKTyh",
     createdAt: new Date("2026-01-02"),
     updatedAt: new Date("2026-01-02")
   },
@@ -22,7 +26,9 @@ export const demoCategories = [
     name: "戀愛人緣",
     slug: "love",
     description: "月老系便利貼，曖昧、祝福、提醒回訊息都很可以。",
+    content: "適合戀愛、人緣、送禮與可愛祝福的商品系列。",
     imageUrl: "https://placehold.co/900x600/FFD7E3/2E2A27/png?text=Love",
+    purchaseUrl: "https://tw.shp.ee/fy2WKTyh",
     createdAt: new Date("2026-01-03"),
     updatedAt: new Date("2026-01-03")
   }
