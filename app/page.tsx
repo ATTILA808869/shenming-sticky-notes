@@ -1,17 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, BadgeCheck } from "lucide-react";
-import { ProductCard } from "@/components/ProductCard";
-import { SectionTitle } from "@/components/SectionTitle";
-import { getCategoriesWithCounts, getHomeContent, getPopularProducts, getPosts } from "@/lib/storefront-data";
+import { getHomeContent } from "@/lib/storefront-data";
 
 export default async function HomePage() {
-  const [home, categories, products, posts] = await Promise.all([
-    getHomeContent(),
-    getCategoriesWithCounts(),
-    getPopularProducts(),
-    getPosts(3)
-  ]);
+  const home = await getHomeContent();
 
   return (
     <main>
@@ -25,7 +18,7 @@ export default async function HomePage() {
             {home?.title ?? "神明便利貼"}
           </h1>
           <p className="mt-5 max-w-2xl text-xl font-semibold leading-8 text-neutral-700">
-            {home?.subtitle ?? "把願望貼起來，讓 Q 版神明幫你盯進度。"}
+            {home?.subtitle ?? "讓信仰圍繞在你的生活。"}
           </p>
           <p className="mt-4 max-w-2xl leading-7 text-neutral-600">{home?.body}</p>
           <div className="mt-8 flex flex-wrap gap-3">
@@ -39,64 +32,13 @@ export default async function HomePage() {
         <div className="relative">
           <div className="relative aspect-square overflow-hidden rounded-lg border border-orange-100 bg-white shadow-soft">
             <Image
-              src={home?.imageUrl ?? "https://placehold.co/900x900/FFE2CF/2E2A27/png?text=神明便利貼"}
+              src={home?.imageUrl ?? "https://placehold.co/900x900/FFE2CF/2E2A27/png?text=God+Notes"}
               alt="神明便利貼品牌主視覺"
               fill
               priority
               className="object-cover"
             />
           </div>
-        </div>
-      </section>
-
-      <section className="container py-16">
-        <div className="mb-8 flex items-end justify-between gap-4">
-          <SectionTitle eyebrow="Categories" title="依照今日願望分類" body="招財、考試、戀愛，先選神明再寫待辦。" />
-          <Link href="/categories" className="hidden font-bold text-temple-red md:block">全部分類</Link>
-        </div>
-        <div className="grid gap-4 md:grid-cols-3">
-          {categories.map((category) => (
-            <Link key={category.id} href={`/categories/${category.slug}`} className="temple-card overflow-hidden">
-              <div className="relative h-48">
-                <Image src={category.imageUrl ?? "https://placehold.co/900x600/FFF1B8/2E2A27/png?text=分類"} alt={category.name} fill className="object-cover" />
-              </div>
-              <div className="p-5">
-                <h3 className="text-xl font-black">{category.name}</h3>
-                <p className="mt-2 line-clamp-2 text-sm leading-6 text-neutral-600">{category.description}</p>
-                <p className="mt-4 text-sm font-bold text-temple-red">{category._count.products} 件商品</p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="container py-16">
-        <div className="mb-8 flex items-end justify-between gap-4">
-          <SectionTitle eyebrow="Popular" title="大家最近都在拜託這些" body="熱賣款、送禮款、上班族精神續命款。" />
-          <Link href="/products" className="hidden font-bold text-temple-red md:block">全部商品</Link>
-        </div>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {products.map((product) => <ProductCard key={product.id} product={product} />)}
-        </div>
-      </section>
-
-      <section className="container py-16">
-        <div className="mb-8 flex items-end justify-between gap-4">
-          <SectionTitle eyebrow="Journal" title="保庇靈感筆記" body="品牌故事、使用提案，以及有點幽默的信仰日常。" />
-          <Link href="/blog" className="hidden font-bold text-temple-red md:block">全部文章</Link>
-        </div>
-        <div className="grid gap-4 md:grid-cols-3">
-          {posts.map((post) => (
-            <Link key={post.id} href={`/blog/${post.slug}`} className="temple-card overflow-hidden">
-              <div className="relative h-48">
-                <Image src={post.coverUrl ?? "https://placehold.co/900x600/FFF8ED/2E2A27/png?text=Blog"} alt={post.title} fill className="object-cover" />
-              </div>
-              <div className="p-5">
-                <h3 className="line-clamp-2 text-lg font-black">{post.title}</h3>
-                <p className="mt-2 line-clamp-2 text-sm leading-6 text-neutral-600">{post.excerpt}</p>
-              </div>
-            </Link>
-          ))}
         </div>
       </section>
     </main>
