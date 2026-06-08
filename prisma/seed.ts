@@ -6,6 +6,12 @@ const img = (text: string, bg = "FFE2CF") =>
   `https://placehold.co/900x900/${bg}/2E2A27/png?text=${encodeURIComponent(text)}`;
 
 async function main() {
+  const existingCategories = await prisma.category.count();
+  if (existingCategories > 0) {
+    console.log("Database already has content. Skipping seed.");
+    return;
+  }
+
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.product.deleteMany();
