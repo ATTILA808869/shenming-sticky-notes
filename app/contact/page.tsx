@@ -8,14 +8,14 @@ const shopeeUrl = "https://tw.shp.ee/fy2WKTyh";
 export default async function ContactPage() {
   const contact = await getContactContent();
   return (
-    <main className="container grid gap-10 py-12 lg:grid-cols-[1fr_0.9fr]">
+    <main className="container grid gap-8 py-8 sm:py-12 lg:grid-cols-[1fr_0.9fr] lg:gap-10">
       <section>
         <p className="text-sm font-black text-temple-red">Contact</p>
-        <h1 className="mt-2 text-4xl font-black md:text-5xl">{contact?.title ?? "聯絡我們"}</h1>
-        <p className="mt-4 text-xl font-semibold leading-8 text-neutral-700">{contact?.subtitle}</p>
-        <div className="mt-6 whitespace-pre-line rounded-lg border border-orange-100 bg-white p-6 leading-8 shadow-soft">{contact?.body}</div>
-        <section className="mt-6 rounded-lg border border-orange-100 bg-white p-6 shadow-soft">
-          <div className="flex items-center gap-3">
+        <h1 className="mt-2 text-4xl font-black leading-tight md:text-5xl">{contact?.title ?? "聯絡我們"}</h1>
+        <p className="mt-4 text-lg font-semibold leading-8 text-neutral-700 sm:text-xl">{contact?.subtitle}</p>
+        <div className="mt-5 whitespace-pre-line rounded-lg border border-orange-100 bg-white p-5 leading-8 shadow-soft sm:mt-6 sm:p-6">{contact?.body}</div>
+        <section className="mt-5 rounded-lg border border-orange-100 bg-white p-5 shadow-soft sm:mt-6 sm:p-6">
+          <div className="flex items-start gap-3 sm:items-center">
             <span className="grid h-11 w-11 place-items-center rounded-md bg-[#06C755] text-white">
               <MessageCircle size={22} />
             </span>
@@ -24,7 +24,7 @@ export default async function ContactPage() {
               <p className="mt-1 text-sm text-neutral-600">掃描 QR Code 或點擊按鈕，直接與我們聯繫。</p>
             </div>
           </div>
-          <a href={lineUrl} target="_blank" rel="noopener noreferrer" className="mx-auto mt-6 block max-w-xs overflow-hidden rounded-lg border border-green-100 bg-white p-4 transition hover:shadow-soft">
+          <a href={lineUrl} target="_blank" rel="noopener noreferrer" className="mx-auto mt-6 block max-w-[260px] overflow-hidden rounded-lg border border-green-100 bg-white p-4 transition hover:shadow-soft sm:max-w-xs">
             <Image
               src="/images/official-line-qrcode.png"
               alt="神明便利貼官方 LINE QR Code"
@@ -34,14 +34,14 @@ export default async function ContactPage() {
               priority
             />
           </a>
-          <a href={lineUrl} target="_blank" rel="noopener noreferrer" className="btn-primary mt-5 w-fit bg-[#06C755] hover:bg-green-600">
+          <a href={lineUrl} target="_blank" rel="noopener noreferrer" className="btn-primary mt-5 w-full bg-[#06C755] py-3 hover:bg-green-600 sm:w-fit">
             前往官方 LINE
             <ExternalLink size={18} />
           </a>
         </section>
       </section>
 
-      <section className="overflow-hidden rounded-lg border border-orange-100 bg-white shadow-soft">
+      <section className="mx-auto w-full max-w-[560px] overflow-hidden rounded-lg border border-orange-100 bg-white shadow-soft lg:max-w-none">
         <a href={shopeeUrl} target="_blank" rel="noopener noreferrer" className="group block">
           <div className="relative aspect-square bg-temple-cream">
             <Image

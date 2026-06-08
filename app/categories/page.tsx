@@ -6,7 +6,7 @@ import { getCategoriesWithCounts } from "@/lib/storefront-data";
 export default async function CategoriesPage() {
   const categories = await getCategoriesWithCounts();
   return (
-    <main className="container py-12">
+    <main className="container py-8 sm:py-12">
       <SectionTitle eyebrow="Categories" title="商品類別" body="瀏覽神明便利貼目前提供的商品系列。" />
       {categories.length === 0 ? (
         <div className="mt-8 rounded-lg border border-orange-100 bg-white p-10 text-center shadow-soft">
@@ -25,8 +25,8 @@ export default async function CategoriesPage() {
                   className="object-cover transition group-hover:scale-105"
                 />
               </div>
-              <div className="p-5 text-center">
-                <h2 className="text-2xl font-black">{category.name}</h2>
+              <div className="p-4 text-center sm:p-5">
+                <h2 className="text-xl font-black sm:text-2xl">{category.name}</h2>
               </div>
             </Link>
           ))}
