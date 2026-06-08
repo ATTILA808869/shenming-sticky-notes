@@ -1,9 +1,9 @@
 import Image from "next/image";
 import { Send } from "lucide-react";
-import { prisma } from "@/lib/prisma";
+import { getContactContent } from "@/lib/storefront-data";
 
 export default async function ContactPage() {
-  const contact = await prisma.siteContent.findUnique({ where: { key: "contact" } }).catch(() => null);
+  const contact = await getContactContent();
   return (
     <main className="container grid gap-10 py-12 lg:grid-cols-[1fr_0.9fr]">
       <section>

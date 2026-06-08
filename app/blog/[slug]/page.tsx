@@ -1,16 +1,22 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getPostBySlug } from "@/lib/storefront-data";
 
 export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const post = await prisma.post.findUnique({ where: { slug } });
+  const post = await getPostBySlug(slug);
   if (!post || !post.published) notFound();
+
   return (
     <main className="container max-w-4xl py-12">
       <article className="overflow-hidden rounded-lg border border-orange-100 bg-white shadow-soft">
         <div className="relative aspect-[16/9]">
-          <Image src={post.coverUrl ?? "https://placehold.co/1200x675/FFF8ED/2E2A27/png?text=Blog"} alt={post.title} fill className="object-cover" />
+          <Image
+            src={post.coverUrl ?? "https://placehold.co/1200x675/FFF8ED/2E2A27/png?text=Blog"}
+            alt={post.title}
+            fill
+            className="object-cover"
+          />
         </div>
         <div className="p-6 md:p-10">
           <p className="text-sm font-black text-temple-red">{post.createdAt.toLocaleDateString("zh-TW")}</p>

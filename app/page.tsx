@@ -1,16 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, BadgeCheck, Gift, Laugh, Truck } from "lucide-react";
-import { prisma } from "@/lib/prisma";
 import { ProductCard } from "@/components/ProductCard";
 import { SectionTitle } from "@/components/SectionTitle";
+import { getCategoriesWithCounts, getHomeContent, getPopularProducts, getPosts } from "@/lib/storefront-data";
 
 export default async function HomePage() {
   const [home, categories, products, posts] = await Promise.all([
-    prisma.siteContent.findUnique({ where: { key: "home" } }).catch(() => null),
-    prisma.category.findMany({ include: { _count: { select: { products: true } } }, orderBy: { createdAt: "asc" } }).catch(() => []),
-    prisma.product.findMany({ include: { category: true }, orderBy: { soldCount: "desc" }, take: 8 }).catch(() => []),
-    prisma.post.findMany({ where: { published: true }, orderBy: { createdAt: "desc" }, take: 3 }).catch(() => [])
+    getHomeContent(),
+    getCategoriesWithCounts(),
+    getPopularProducts(),
+    getPosts(3)
   ]);
 
   return (

@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
 import { SectionTitle } from "@/components/SectionTitle";
+import { getCategoriesWithCounts } from "@/lib/storefront-data";
 
 export default async function CategoriesPage() {
-  const categories = await prisma.category.findMany({ include: { _count: { select: { products: true } } }, orderBy: { createdAt: "asc" } }).catch(() => []);
+  const categories = await getCategoriesWithCounts();
   return (
     <main className="container py-12">
       <SectionTitle eyebrow="Categories" title="商品大分類" body="先說出你的願望，再讓神明便利貼幫你整理今日任務。" />

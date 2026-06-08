@@ -2,20 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ShoppingBag, Sparkles } from "lucide-react";
 import "./globals.css";
-import { prisma } from "@/lib/prisma";
+import { getCategories } from "@/lib/storefront-data";
 
 export const metadata: Metadata = {
   title: "神明便利貼",
   description: "可愛 Q 版神明文創便利貼品牌與購物網站"
 };
-
-async function getCategories() {
-  try {
-    return await prisma.category.findMany({ orderBy: { createdAt: "asc" } });
-  } catch {
-    return [];
-  }
-}
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const categories = await getCategories();

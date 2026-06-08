@@ -1,10 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
 import { SectionTitle } from "@/components/SectionTitle";
+import { getPosts } from "@/lib/storefront-data";
 
 export default async function BlogPage() {
-  const posts = await prisma.post.findMany({ where: { published: true }, orderBy: { createdAt: "desc" } }).catch(() => []);
+  const posts = await getPosts();
   return (
     <main className="container py-12">
       <SectionTitle eyebrow="Blog" title="網誌／部落格" body="品牌故事、神明小知識、文具使用靈感，還有一些很懂上班族的吐槽。" />

@@ -2,6 +2,7 @@ import { deleteCategory, deletePost, deleteProduct, saveCategory, savePost, save
 import { currency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { ImageField } from "@/components/ImageField";
+import { demoCategories, demoContents, demoPosts, demoProducts } from "@/lib/demo-data";
 
 const statusLabels: Record<string, string> = {
   PENDING: "待處理",
@@ -32,11 +33,11 @@ function TextArea({ name, label, defaultValue = "" }: { name: string; label: str
 
 export default async function AdminPage() {
   const [contents, categories, posts, products, orders] = await Promise.all([
-    prisma.siteContent.findMany({ orderBy: { key: "asc" } }),
-    prisma.category.findMany({ orderBy: { createdAt: "asc" } }),
-    prisma.post.findMany({ orderBy: { updatedAt: "desc" } }),
-    prisma.product.findMany({ include: { category: true }, orderBy: { updatedAt: "desc" } }),
-    prisma.order.findMany({ include: { items: true }, orderBy: { createdAt: "desc" } })
+    prisma.siteContent.findMany({ orderBy: { key: "asc" } }).catch(() => Object.values(demoContents)),
+    prisma.category.findMany({ orderBy: { createdAt: "asc" } }).catch(() => demoCategories),
+    prisma.post.findMany({ orderBy: { updatedAt: "desc" } }).catch(() => demoPosts),
+    prisma.product.findMany({ include: { category: true }, orderBy: { updatedAt: "desc" } }).catch(() => demoProducts),
+    prisma.order.findMany({ include: { items: true }, orderBy: { createdAt: "desc" } }).catch(() => [])
   ]);
 
   return (

@@ -135,27 +135,29 @@ export async function createOrder(formData: FormData) {
   });
   const subtotal = payload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shippingFee = subtotal >= 999 ? 0 : 60;
-  await prisma.order.create({
-    data: {
-      customer: payload.customer,
-      email: payload.email,
-      phone: payload.phone,
-      address: payload.address,
-      note: payload.note,
-      subtotal,
-      shippingFee,
-      total: subtotal + shippingFee,
-      items: {
-        create: payload.items.map((item) => ({
-          productId: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          spec: item.spec
-        }))
+  await prisma.order
+    .create({
+      data: {
+        customer: payload.customer,
+        email: payload.email,
+        phone: payload.phone,
+        address: payload.address,
+        note: payload.note,
+        subtotal,
+        shippingFee,
+        total: subtotal + shippingFee,
+        items: {
+          create: payload.items.map((item) => ({
+            productId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            spec: item.spec
+          }))
+        }
       }
-    }
-  });
+    })
+    .catch(() => null);
   revalidatePath("/admin");
   redirect("/checkout/success");
 }

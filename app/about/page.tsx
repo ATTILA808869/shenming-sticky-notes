@@ -1,8 +1,8 @@
 import Image from "next/image";
-import { prisma } from "@/lib/prisma";
+import { getAboutContent } from "@/lib/storefront-data";
 
 export default async function AboutPage() {
-  const about = await prisma.siteContent.findUnique({ where: { key: "about" } }).catch(() => null);
+  const about = await getAboutContent();
   return (
     <main className="container grid gap-10 py-12 lg:grid-cols-[0.9fr_1.1fr]">
       <div className="relative aspect-square overflow-hidden rounded-lg border border-orange-100 bg-white shadow-soft">
