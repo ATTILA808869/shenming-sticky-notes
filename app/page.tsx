@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, Gift, Laugh, Truck } from "lucide-react";
+import { ArrowRight, BadgeCheck } from "lucide-react";
 import { ProductCard } from "@/components/ProductCard";
 import { SectionTitle } from "@/components/SectionTitle";
 import { getCategoriesWithCounts, getHomeContent, getPopularProducts, getPosts } from "@/lib/storefront-data";
@@ -46,33 +46,6 @@ export default async function HomePage() {
               className="object-cover"
             />
           </div>
-          <div className="absolute -bottom-5 left-6 right-6 rounded-lg bg-white p-4 shadow-soft">
-            <div className="grid grid-cols-3 gap-3 text-center text-sm font-bold">
-              <span>保庇待辦</span>
-              <span>喜氣送禮</span>
-              <span>上班不厭世</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-white py-14">
-        <div className="container grid gap-4 md:grid-cols-3">
-          {[
-            { title: "滿額免運", body: "NT$999 以上宅配免運", Icon: Truck },
-            { title: "可愛保庇", body: "每款都有一句日常神明吐槽", Icon: Laugh },
-            { title: "文創送禮", body: "適合朋友、同事、考生與自己", Icon: Gift }
-          ].map(({ title, body, Icon }) => (
-            <div key={title} className="flex items-start gap-4 rounded-lg border border-orange-100 p-5">
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-temple-cream text-temple-red">
-                <Icon size={22} />
-              </span>
-              <div>
-                <h3 className="font-black">{title}</h3>
-                <p className="mt-1 text-sm text-neutral-600">{body}</p>
-              </div>
-            </div>
-          ))}
         </div>
       </section>
 
