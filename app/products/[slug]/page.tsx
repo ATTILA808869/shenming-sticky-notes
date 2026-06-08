@@ -1,7 +1,7 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Star } from "lucide-react";
-import { AddToCart } from "@/components/AddToCart";
 import { ProductCard } from "@/components/ProductCard";
 import { currency, splitList } from "@/lib/format";
 import { getProductBySlug, getRelatedProducts } from "@/lib/storefront-data";
@@ -58,8 +58,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             {product.salePrice ? <span className="ml-3 text-neutral-400 line-through">{currency(product.price)}</span> : null}
           </div>
           <p className="mt-6 leading-8 text-neutral-700">{product.description}</p>
-          <div className="mt-6">
-            <AddToCart product={product} />
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/contact" className="btn-primary py-3">
+              聯絡我們了解更多
+            </Link>
+            <Link href="/categories" className="btn-secondary py-3">
+              返回商品類別
+            </Link>
           </div>
         </section>
       </section>
