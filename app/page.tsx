@@ -59,18 +59,18 @@ export default async function HomePage() {
             <p className="mt-4 max-w-xl text-base leading-8 text-neutral-700">
               把 Q 版神明帶進聊天日常，拜託、保庇、已讀不回都能可愛表達。
             </p>
-            <Link href="https://line.me/S/sticker/33891959" target="_blank" rel="noopener noreferrer" className="btn-primary mt-6 inline-flex py-3">
+            <Link href="https://store.line.me/stickershop/author/2905643/zh-Hant" target="_blank" rel="noopener noreferrer" className="btn-primary mt-6 inline-flex py-3">
               前往下載
               <ArrowRight size={18} />
             </Link>
           </div>
-          <Link href="https://line.me/S/sticker/33891959" target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg border border-orange-100 bg-white">
-            <div className="relative aspect-[753/272] w-full">
+          <Link href="https://store.line.me/stickershop/author/2905643/zh-Hant" target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg border border-orange-100 bg-white">
+            <div className="relative mx-auto aspect-[303/290] w-full max-w-[420px]">
               <Image
-                src="/images/line-sticker-zhongshen-chat.png"
+                src="/images/line-sticker-zhongshen-cover.png"
                 alt="眾神群聊 LINE 貼圖下載頁面"
                 fill
-                className="object-cover"
+                className="object-contain"
               />
             </div>
           </Link>
