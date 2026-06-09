@@ -86,6 +86,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               信箱 amy191933@gmail.com
             </div>
           </div>
+          <div className="border-t border-orange-100 py-4 text-center text-xs leading-6 text-neutral-500">
+            © 2025 神明便利貼 溱鋐設計 華茜商行 版權所有｜網站內容、圖片與文案未經授權請勿轉載、使用或仿製
+          </div>
         </footer>
         <FloatingHomeButton />
       </body>
