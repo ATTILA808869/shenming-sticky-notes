@@ -1,8 +1,54 @@
 import Image from "next/image";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getPostBySlug } from "@/lib/storefront-data";
 
-export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
+type PostPageProps = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({ params }: PostPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getPostBySlug(slug);
+
+  if (!post || !post.published) {
+    return {
+      title: "文章不存在"
+    };
+  }
+
+  const description = post.excerpt || post.content.slice(0, 120);
+  const url = `/blog/${post.slug}`;
+  const image = post.coverUrl || "/images/brand-logo.png";
+
+  return {
+    title: post.title,
+    description,
+    alternates: {
+      canonical: url
+    },
+    openGraph: {
+      title: post.title,
+      description,
+      url,
+      type: "article",
+      publishedTime: post.createdAt.toISOString(),
+      modifiedTime: post.updatedAt.toISOString(),
+      images: [
+        {
+          url: image,
+          alt: post.title
+        }
+      ]
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description,
+      images: [image]
+    }
+  };
+}
+
+export default async function PostPage({ params }: PostPageProps) {
   const { slug } = await params;
   const post = await getPostBySlug(slug);
   if (!post || !post.published) notFound();

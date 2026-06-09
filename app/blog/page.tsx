@@ -1,7 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { SectionTitle } from "@/components/SectionTitle";
 import { getPosts } from "@/lib/storefront-data";
+
+export const metadata: Metadata = {
+  title: "文章布告",
+  description: "神明便利貼文章布告，分享台灣民間信仰小知識、Q 版神明故事、文創設計靈感與日常保庇筆記。",
+  alternates: {
+    canonical: "/blog"
+  }
+};
 
 export default async function BlogPage() {
   const posts = await getPosts();
