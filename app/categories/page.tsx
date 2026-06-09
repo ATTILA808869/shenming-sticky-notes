@@ -7,7 +7,7 @@ export default async function CategoriesPage() {
   const categories = await getCategoriesWithCounts();
   return (
     <main className="container py-8 sm:py-12">
-      <SectionTitle eyebrow="Categories" title="商品類別" body="瀏覽神明便利貼目前提供的商品系列。" />
+      <SectionTitle title="神明便利貼主要產品" body="神明便利貼設計紙藝相關配件以及周邊商品" />
       {categories.length === 0 ? (
         <div className="mt-8 rounded-lg border border-orange-100 bg-white p-10 text-center shadow-soft">
           <p className="text-lg font-bold">目前尚無商品類別</p>
@@ -25,8 +25,11 @@ export default async function CategoriesPage() {
                   className="object-cover transition group-hover:scale-105"
                 />
               </div>
-              <div className="p-4 text-center sm:p-5">
+              <div className="flex items-center justify-center gap-3 p-4 text-center sm:p-5">
                 <h2 className="text-xl font-black sm:text-2xl">{category.name}</h2>
+                <span className="rounded-full border border-orange-200 px-3 py-1 text-xs font-black text-temple-red transition group-hover:bg-temple-red group-hover:text-white">
+                  了解詳情
+                </span>
               </div>
             </Link>
           ))}

@@ -5,8 +5,8 @@ import { SectionTitle } from "@/components/SectionTitle";
 import { getPosts } from "@/lib/storefront-data";
 
 export const metadata: Metadata = {
-  title: "文章布告",
-  description: "神明便利貼文章布告，分享台灣民間信仰小知識、Q 版神明故事、文創設計靈感與日常保庇筆記。",
+  title: "神明布告欄",
+  description: "神明便利貼神明布告欄，分享神明小知識與公告。",
   alternates: {
     canonical: "/blog"
   }
@@ -16,7 +16,7 @@ export default async function BlogPage() {
   const posts = await getPosts();
   return (
     <main className="container py-8 sm:py-12">
-      <SectionTitle eyebrow="Blog" title="網誌／部落格" body="品牌故事、神明小知識、文具使用靈感，還有一些很懂上班族的吐槽。" />
+      <SectionTitle title="神明布告欄" body="神明小知識 與 公告" />
       {posts.length === 0 ? (
         <div className="mt-8 rounded-lg border border-orange-100 bg-white p-6 text-center shadow-soft sm:p-10">
           <p className="text-lg font-bold">目前尚無文章布告</p>

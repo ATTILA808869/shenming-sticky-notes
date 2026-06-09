@@ -10,7 +10,6 @@ export default async function ContactPage() {
   return (
     <main className="container grid gap-8 py-8 sm:py-12 lg:grid-cols-[1fr_0.9fr] lg:gap-10">
       <section>
-        <p className="text-sm font-black text-temple-red">Contact</p>
         <h1 className="mt-2 text-4xl font-black leading-tight md:text-5xl">{contact?.title ?? "聯絡我們"}</h1>
         <p className="mt-4 text-lg font-semibold leading-8 text-neutral-700 sm:text-xl">{contact?.subtitle}</p>
         <div className="mt-5 whitespace-pre-line rounded-lg border border-orange-100 bg-white p-5 leading-8 shadow-soft sm:mt-6 sm:p-6">{contact?.body}</div>
