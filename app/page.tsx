@@ -22,7 +22,7 @@ export default async function HomePage() {
         <div className="order-1">
           <div className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black text-temple-red shadow-sm sm:mb-5 sm:px-4 sm:text-sm">
             <BadgeCheck size={16} className="shrink-0" />
-            <span className="truncate">台灣味 Q 版神明文具店</span>
+            <span className="truncate">原來神明也能這麼Q</span>
           </div>
           <h1 className="max-w-3xl text-4xl font-black leading-tight tracking-normal text-temple-ink sm:text-5xl md:text-6xl lg:text-7xl">
             {home?.title ?? "神明便利貼"}
@@ -49,6 +49,31 @@ export default async function HomePage() {
               className="object-cover"
             />
           </div>
+        </div>
+      </section>
+      <section className="container pb-12 sm:pb-16">
+        <div className="grid items-center gap-6 rounded-lg border border-orange-100 bg-white p-5 shadow-soft sm:p-6 lg:grid-cols-[0.9fr_1.1fr] lg:p-8">
+          <div>
+            <p className="text-sm font-black text-temple-red">LINE Stickers</p>
+            <h2 className="mt-2 text-2xl font-black leading-tight text-temple-ink sm:text-3xl">眾神群聊 LINE 貼圖上架</h2>
+            <p className="mt-4 max-w-xl text-base leading-8 text-neutral-700">
+              把 Q 版神明帶進聊天日常，拜託、保庇、已讀不回都能可愛表達。
+            </p>
+            <Link href="https://line.me/S/sticker/33891959" target="_blank" rel="noopener noreferrer" className="btn-primary mt-6 inline-flex py-3">
+              前往下載
+              <ArrowRight size={18} />
+            </Link>
+          </div>
+          <Link href="https://line.me/S/sticker/33891959" target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg border border-orange-100 bg-white">
+            <div className="relative aspect-[753/272] w-full">
+              <Image
+                src="/images/line-sticker-zhongshen-chat.png"
+                alt="眾神群聊 LINE 貼圖下載頁面"
+                fill
+                className="object-cover"
+              />
+            </div>
+          </Link>
         </div>
       </section>
     </main>
