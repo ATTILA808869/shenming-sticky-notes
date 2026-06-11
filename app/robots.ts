@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: "/admin"
     },
-    sitemap: "https://shenming-sticky-notes.vercel.app/sitemap.xml"
+    sitemap: "https://shenming-sticky-notes.vercel.app/sitemap-static.xml"
   };
 }
