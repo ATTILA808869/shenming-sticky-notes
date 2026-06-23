@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, BadgeCheck } from "lucide-react";
+import { HeroImageCarousel } from "@/components/HeroImageCarousel";
 import { getHomeContent } from "@/lib/storefront-data";
 
 export default async function HomePage() {
@@ -40,7 +41,7 @@ export default async function HomePage() {
           </div>
         </div>
         <div className="order-2">
-          <div className="relative mx-auto aspect-square w-full max-w-[560px] overflow-hidden rounded-lg border border-orange-100 bg-white shadow-soft lg:max-w-none">
+          <div className="hidden relative mx-auto aspect-square w-full max-w-[560px] overflow-hidden rounded-lg border border-orange-100 bg-white shadow-soft lg:max-w-none">
             <Image
               src={home?.imageUrl ?? "https://placehold.co/900x900/FFE2CF/2E2A27/png?text=God+Notes"}
               alt="神明便利貼品牌主視覺"
@@ -49,6 +50,7 @@ export default async function HomePage() {
               className="object-cover"
             />
           </div>
+          <HeroImageCarousel />
         </div>
       </section>
       <section className="container pb-12 sm:pb-16">
