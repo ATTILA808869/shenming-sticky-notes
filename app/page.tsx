@@ -68,7 +68,7 @@ export default async function HomePage() {
             </Link>
           </div>
           <Link href="https://store.line.me/stickershop/author/2905643/zh-Hant" target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg border border-orange-100 bg-white">
-            <div className="relative mx-auto aspect-[303/290] w-full max-w-[420px]">
+            <div className="relative mx-auto aspect-[4/5] w-full max-w-[420px]">
               <Image
                 src="/images/line-sticker-zhongshen-cover.png"
                 alt="眾神群聊 LINE 貼圖下載頁面"
