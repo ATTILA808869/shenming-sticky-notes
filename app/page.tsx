@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, BadgeCheck } from "lucide-react";
+import { CulturalProductShowcase } from "@/components/CulturalProductShowcase";
 import { HeroImageCarousel } from "@/components/HeroImageCarousel";
 import { getHomeContent } from "@/lib/storefront-data";
 
@@ -78,6 +79,7 @@ export default async function HomePage() {
           </Link>
         </div>
       </section>
+      <CulturalProductShowcase />
     </main>
   );
 }
