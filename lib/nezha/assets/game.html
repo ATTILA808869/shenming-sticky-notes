@@ -328,18 +328,20 @@ async function accountRequest(path,data){
 }
 async function showLeaderboard(back){
   setMode('done');
-  panel('無限塔排行榜','先比通過樓層，再比下一層擊殺數。',[['返回',back]]);
+  panel('無限塔排行榜','',[['返回',back]]);
   const status=card.querySelector('p');
   status.textContent='載入排行榜…';
   try{
     const {scores}=await accountRequest('leaderboard');
     if(!card.contains(status))return;
-    status.textContent=scores.length?'前 '+scores.length+' 名':'目前還沒有紀錄。';
+    status.textContent=scores.length
+      ? '前 100 名，依最高通過樓層排序。'
+      : '目前還沒有紀錄。通過無限塔第 1 層後即可公開成績。';
     if(!scores.length)return;
     const list=document.createElement('ol');list.className='ranking';
     for(const score of scores){
       const row=document.createElement('li');
-      row.textContent=score.nickname+' · 通過 '+score.cleared+' 層 · 下一層擊殺 '+score.progress;
+      row.textContent=score.nickname+' · 通過第 '+score.cleared+' 層';
       list.append(row);
     }
     status.after(list);
@@ -351,17 +353,17 @@ function finish(won){
   const record={cleared:clearedFloors,progress,kills};
   const replay=()=>finish(won);
   const choices=[['再玩一局',start],['無限塔排行榜',()=>showLeaderboard(replay)]];
-  if(record.cleared||record.progress)choices.push(['公開本局成績',async()=>{
+  if(record.cleared>0)choices.push(['公開本局成績',async()=>{
     if(optionButtons[2].disabled)return;
     const button=optionButtons[2];button.disabled=true;
     const status=document.createElement('div');status.setAttribute('role','status');card.append(status);
     try{
       const result=await accountRequest('score',record);
-      status.textContent=result.updated?'已登榜！':'排行榜已保留你更好的成績。';
+      status.textContent=result.updated?'已儲存最高通過樓層。':'已保留你原有的最高通過樓層。';
     }catch(error){status.textContent=error.message;button.disabled=false;}
   }]);
   panel(won?'本局結束':'再試一次吧！',
-    (towerFloor?'闖到無限塔第 '+towerFloor+' 層，本層擊退 '+floorKills+' 隻。':'生存計時 '+formatTime(time)+'。')+' 等級 '+player.level+'，總擊退 '+kills+' 隻敵人。',choices,true);
+    (towerFloor?'無限塔通過 '+clearedFloors+' 層。':'生存計時 '+formatTime(time)+'。')+' 等級 '+player.level+'，總擊退 '+kills+' 隻敵人。',choices,true);
 }
 function formatTime(seconds){
   const value=Math.floor(seconds+.00001);

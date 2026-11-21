@@ -3,23 +3,23 @@ import { GameError } from "./session";
 
 export async function getScores() {
   const scores = await prisma.nezhaScore.findMany({
-    orderBy: [{ cleared: "desc" }, { progress: "desc" }, { kills: "desc" }, { recordedAt: "asc" }, { accountId: "asc" }],
-    take: 50,
-    select: { account: { select: { nickname: true } }, cleared: true, progress: true, kills: true }
+    where: { cleared: { gt: 0 } },
+    orderBy: [{ cleared: "desc" }, { recordedAt: "asc" }, { accountId: "asc" }],
+    take: 100,
+    select: { account: { select: { nickname: true } }, cleared: true }
   });
 
-  return scores.map(({ account, cleared, progress, kills }) => ({
-    nickname: account.nickname, cleared, progress, kills
+  return scores.map(({ account, cleared }) => ({
+    nickname: account.nickname, cleared
   }));
 }
 
 export async function saveScore(data: Record<string, unknown>, accountId: string) {
   const { cleared, progress, kills } = data;
   if (typeof cleared !== "number" || typeof progress !== "number" || typeof kills !== "number" ||
-      ![cleared, progress, kills].every(Number.isSafeInteger) || cleared < 0 || cleared > 10_000 ||
-      progress < 0 || progress > 1000 || kills < cleared * 1000 + progress || kills > 100_000_000 ||
-      (cleared === 0 && progress === 0)) {
-    throw new GameError(400, "沒有可登榜的無限塔紀錄。");
+      ![cleared, progress, kills].every(Number.isSafeInteger) || cleared < 1 || cleared > 10_000 ||
+      progress < 0 || progress > 1000 || kills < cleared * 1000 + progress || kills > 100_000_000) {
+    throw new GameError(400, "須至少通過無限塔第 1 層才能登錄成績。");
   }
 
   // Keep the best score even if two game results arrive together.
@@ -29,8 +29,7 @@ export async function saveScore(data: Record<string, unknown>, accountId: string
     ON CONFLICT ("accountId") DO UPDATE SET
       "cleared" = EXCLUDED."cleared", "progress" = EXCLUDED."progress",
       "kills" = EXCLUDED."kills", "recordedAt" = EXCLUDED."recordedAt"
-    WHERE (EXCLUDED."cleared", EXCLUDED."progress", EXCLUDED."kills") >
-      ("NezhaScore"."cleared", "NezhaScore"."progress", "NezhaScore"."kills")
+    WHERE EXCLUDED."cleared" > "NezhaScore"."cleared"
   `;
   return count > 0;
 }
