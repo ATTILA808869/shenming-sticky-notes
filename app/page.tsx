@@ -42,7 +42,7 @@ export default async function HomePage() {
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a href="/games/nezha" className="btn-secondary py-3">
               <Gamepad2 size={18} aria-hidden="true" />
-              玩三太子守廟埕
+              玩神明Q仙傳
             </a>
           </div>
         </div>

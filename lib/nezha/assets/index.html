@@ -2,13 +2,24 @@
 <html lang="zh-Hant">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>登入｜三太子守廟埕</title>
+<title>登入｜神明Q仙傳</title>
 <style>
-*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:16px;background:#26153e;color:#3a2050;font:16px system-ui,sans-serif}main{background:#fff4dc;width:min(100%,420px);border:3px solid #ffbd75;border-radius:24px;padding:28px;box-shadow:0 10px #140e28}small{color:#81422b}h1{margin:5px 0 22px;font-size:clamp(28px,8vw,40px)}form,label{display:grid;gap:8px}form{gap:14px}input,button{font:inherit;padding:10px;border-radius:10px;border:1px solid #7e638f}input{width:100%;background:white}button{font-weight:700;background:#ffd270;color:#331a46;cursor:pointer}button.secondary{background:transparent;margin-top:10px;width:100%}#status{color:#9a243b;min-height:1.35em;margin-bottom:0}[hidden]{display:none!important}
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:16px;background:#101d25;color:#fff3dc;font:16px system-ui,sans-serif}
+main{background:#21343b;color:#fff3dc;width:min(100%,420px);border:2px solid #e5ab65;border-radius:4px;padding:24px;box-shadow:0 0 0 4px #17252d,0 9px #080f18}
+small,a{color:#ffcf77}h1{margin:5px 0 20px;font-size:32px;color:#ffcf77}
+form,label{display:grid;gap:7px}form{gap:12px}
+input,button{font:inherit;padding:9px;border-radius:4px;border:1px solid #a38b66}
+input{width:100%;background:#142932;color:#fff3dc}
+button{font-weight:800;background:#ffcf77;color:#331e22;cursor:pointer;box-shadow:0 3px #a45d42}
+button.secondary{background:transparent;color:#ffe3ad;margin-top:10px;width:100%;box-shadow:none}
+#status{color:#ffbcac;min-height:1.35em;margin-bottom:6px}[hidden]{display:none!important}
+input:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid white;outline-offset:2px}
 </style>
 <main>
 <small>神明便利貼</small>
-<h1>三太子守廟埕</h1>
+<h1>神明Q仙傳</h1>
 <form id="auth" hidden>
 <label>帳號<input name="username" required minlength="3" maxlength="24" pattern="[a-zA-Z0-9_]+" autocomplete="username" autocapitalize="none"></label>
 <label>密碼<input id="password" name="password" type="password" required minlength="8" maxlength="128" autocomplete="current-password"></label>
@@ -21,7 +32,7 @@
 <button type="submit">儲存暱稱並開始</button>
 </form>
 <p id="status" role="status">正在確認登入狀態…</p>
-<a href="/" style="display:inline-block;margin-top:12px;color:#663750">返回神明便利貼</a>
+<a href="/" style="display:inline-block;margin-top:8px">返回神明便利貼</a>
 </main>
 <script>
 const auth=document.querySelector('#auth');
