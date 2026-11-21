@@ -60,6 +60,7 @@ hero.src = '/games/nezha/nezha.webp';
 const keys = new Set();
 const rounds = 480;
 const contactHitInterval = 0.5;
+const rewardInterval = 6;
 const mapWidth = 2880;
 const mapHeight = 2160;
 const wheelRadius = 72;
@@ -82,7 +83,7 @@ const towerGoal=1000;
 let towerFloor, floorKills, floorTime, towerTime, clearedFloors;
 let optionButtons=[];
 const miniBossChance=.30;
-let nextWaveAt, activeWave, miniBossKills, miniBossThreshold, gearRewards;
+let nextWaveAt, activeWave, miniBossKills, miniBossThreshold, gearRewards, nextRewardAt;
 let boss, nextBoss, elapsed, shots, bricks, warnings, drops, ingots, wheelTrail, trailTimer;
 let camera = {x:0,y:0};
 let width, height, player, mobs, stars, sparks, time, spawn, kills, mode;
@@ -111,7 +112,7 @@ function reset(){
   mobs=[]; stars=[]; sparks=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
   towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
-  nextWaveAt=60;activeWave=null;miniBossKills=0;miniBossThreshold=50;gearRewards=0;
+  nextWaveAt=60;activeWave=null;miniBossKills=0;miniBossThreshold=50;gearRewards=0;nextRewardAt=0;
   trackCamera();
 }
 function setMode(next){
@@ -240,10 +241,21 @@ function addMiniBoss(){
     y:clamp(player.y+Math.sin(angle)*185,25,mapHeight-25),
     flash:0,stun:0,phase:Math.random()*6});
 }
-const needed=()=>{
-  const previousLevels=player.level-1;
-  return 5+Math.floor(previousLevels*3+previousLevels**1.28);
-};
+function regularLevelXP(targetLevel){
+  if(targetLevel<=20)return 5+10*(targetLevel-2);
+  if(targetLevel<=40)return 195+13*(targetLevel-21);
+
+  const levelsFrom50=targetLevel-50;
+  const beyondChart=Math.max(0,levelsFrom50);
+  // Match the chart through level 50, then gradually increase the cost per level.
+  return Math.round(599+levelsFrom50*(158/9)+.22*beyondChart**2);
+}
+function needed(){
+  const targetLevel=player.level+1;
+  if(targetLevel===21)return 795;
+  if(targetLevel===41)return 2855;
+  return regularLevelXP(targetLevel);
+}
 function enemyXP(enemy){
   const minutes=Math.floor(challengeTime()/60);
   const base=1+minutes+Math.floor(minutes/3)+towerFloor*2;
@@ -284,9 +296,7 @@ function showGearReward(){
   gearRewards--;
   setMode('upgrade');
   panel('小魔王戰利品','選一件道具強化三太子。',availableGearUpgrades().map(([label,apply])=>[label.replace('移動速度＋4','移動速度＋'+Math.min(4,maxMoveSpeed-player.speed)),()=>{
-    apply();applyEvolutions();
-    if(gearRewards>0)showGearReward();
-    else setMode('play');
+    apply();applyEvolutions();setMode('play');
   }]));
 }
 function showUpgrades(first=false){
@@ -717,15 +727,22 @@ function update(dt){
   if(boss?.hp<=0){
     kills++;warnings=[];
     if(towerFloor||nextBoss===bossStages.length){boss=null;floorCleared();return;}
-    dropLoot(boss,needed());
+    dropLoot(boss,regularLevelXP(player.level+1));
     boss=null;
   }
   if(towerFloor&&!boss&&floorKills>=towerGoal)spawnTowerGuardian();
   collectLoot(dt);
   sparks=sparks.filter(s=>(s.life-=dt)>0);
-  if(gearRewards>0)showGearReward();
-  else if(player.xp>=needed()){
-    player.xp-=needed();player.level++;showUpgrades();
+  if(elapsed<nextRewardAt)return;
+  const requiredXP=needed();
+  if(gearRewards>0){
+    nextRewardAt=elapsed+rewardInterval;
+    showGearReward();
+  }else if(player.xp>=requiredXP){
+    player.xp-=requiredXP;
+    player.level++;
+    nextRewardAt=elapsed+rewardInterval;
+    showUpgrades();
   }
 }
 function circle(x,y,r,fill,stroke,line=2){
