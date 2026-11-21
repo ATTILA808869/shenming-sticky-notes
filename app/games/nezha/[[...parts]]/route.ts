@@ -25,12 +25,19 @@ function errorResponse(error: unknown) {
   return json({ error: "遊戲服務暫時無法使用，請稍後再試。" }, 503);
 }
 
-async function asset(name: "index.html" | "game.html" | "nezha.webp") {
+const assetTypes = {
+  "index.html": "text/html; charset=utf-8",
+  "game.html": "text/html; charset=utf-8",
+  "nezha.webp": "image/webp",
+  "nezha-sheet.png": "image/png"
+};
+
+async function asset(name: keyof typeof assetTypes) {
   const bytes = await readFile(resolve(process.cwd(), "lib", "nezha", "assets", name));
   return new Response(new Uint8Array(bytes), {
     headers: {
       ...privateHeaders,
-      "Content-Type": name.endsWith(".html") ? "text/html; charset=utf-8" : "image/webp",
+      "Content-Type": assetTypes[name],
       "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'"
     }
   });
@@ -110,7 +117,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         });
       }
       case "nezha.webp":
-        if ((await gameSession(request))?.account.nickname) return await asset("nezha.webp");
+      case "nezha-sheet.png":
+        if ((await gameSession(request))?.account.nickname) return await asset(path);
         break;
       case "api/session": {
         const session = await gameSession(request);

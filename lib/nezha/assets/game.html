@@ -35,7 +35,7 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 .card{width:min(430px,100%);padding:21px;text-align:center;background:#21343b;color:var(--ink);border:2px solid #e5ab65;box-shadow:0 0 0 3px #162126,0 8px #101b22;border-radius:4px;overflow-wrap:anywhere}
 .card h1{font-size:29px;line-height:1.15;margin:4px 0 10px;color:var(--gold)}
 .card p{line-height:1.5;margin:7px 0 12px;font-size:14px;color:#e3e7d8}
-.card .portrait{width:72px;height:84px;margin:auto}
+.card .portrait{width:96px;height:96px;margin:auto}
 .actions{display:grid;gap:7px}.actions button{width:100%;text-align:left;padding:7px 10px}
 .skills{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .skill{min-width:0;background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--red);padding:6px 8px}
@@ -63,7 +63,7 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 @media(max-height:470px){
   main{padding-block:5px;gap:4px}
   .card{padding:10px}.card h1{font-size:21px;margin:2px 0 5px}
-  .card .portrait{width:44px;height:52px}.card p{margin:4px 0 6px}
+  .card .portrait{width:56px;height:56px}.card p{margin:4px 0 6px}
   #gear,.hint .controls{display:none}
 }
 </style>
@@ -93,6 +93,19 @@ const ctx = canvas.getContext('2d');
 const overlay = document.querySelector('#overlay');
 const card = document.querySelector('#card');
 const pause = document.querySelector('#pause');
+const heroSheet = new Image();
+const heroCellSize = 724;
+// Each body stays centered on the same point, including the wider attack pose.
+const heroPoses = {
+  idle:{column:0,anchorX:319,anchorY:668},
+  fly:{column:1,anchorX:313,anchorY:659},
+  attack:{column:2,anchorX:387,anchorY:663}
+};
+heroSheet.addEventListener('load',()=>{
+  const portrait=card.querySelector('.portrait');
+  if(portrait)drawHeroPortrait(portrait);
+});
+heroSheet.src='/games/nezha/nezha-sheet.png';
 const keys = new Set();
 const rounds = 480;
 const contactHitInterval = 0.5;
@@ -158,7 +171,7 @@ function reset(){
     wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
     skillLevels:[0,0,0], evolved:[false,false,false], gear:[0,0,0,0],
     healTimer:0,
-    moving:false,heading:0};
+    moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1};
   mobs=[]; stars=[]; sparks=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
   towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
@@ -176,10 +189,10 @@ function panel(title,desc,choices,portrait=false){
   if(portrait){
     const preview=document.createElement('canvas');
     preview.className='portrait';
-    preview.width=24;preview.height=28;
+    preview.width=96;preview.height=96;
     preview.setAttribute('role','img');
     preview.setAttribute('aria-label','像素三太子');
-    paintHero(preview.getContext('2d'),0,false);
+    drawHeroPortrait(preview);
     card.append(preview);
   }
   const h=document.createElement('h1'); h.textContent=title;
@@ -599,6 +612,11 @@ function damage(enemy,value){
 function hurt(value){
   player.hp=Math.max(0,player.hp-Math.max(1,Math.round(value*100/(100+player.defense))));
 }
+function poseForAttack(target){
+  const dx=target.x-player.x;
+  player.attackFacing=Math.abs(dx)>2?Math.sign(dx):player.facing;
+  player.attackUntil=elapsed+.23;
+}
 function useSkills(dt,enemies){
   player.ringTimer-=dt;player.brickTimer-=dt;
   if((player.rings&&player.ringTimer<=0)||(player.bricks&&player.brickTimer<=0)){
@@ -606,6 +624,7 @@ function useSkills(dt,enemies){
     const target=targets[0];
     const aim=target?Math.atan2(target.y-player.y,target.x-player.x):player.heading;
     if(player.rings&&player.ringTimer<=0&&target){
+      poseForAttack(target);
       for(let i=0;i<player.rings;i++){
         const offset=i-(player.rings-1)/2;
         const angle=aim+(player.pattern===2?i*2*Math.PI/player.rings:offset*(player.pattern===1?.29:.037));
@@ -615,6 +634,7 @@ function useSkills(dt,enemies){
       player.ringTimer=ringCooldown;
     }
     if(player.bricks&&player.brickTimer<=0&&target){
+      poseForAttack(target);
       for(let i=0;i<player.bricks;i++){
         const enemy=targets[i%targets.length];
         const offset=targets.length<=i?12*(i%3-1):0;
@@ -761,6 +781,7 @@ function update(dt){
   if(stick&&Math.hypot(stick.dx,stick.dy)>5){dx=stick.dx;dy=stick.dy;}
   player.moving=Boolean(dx||dy);
   if(player.moving)player.heading=Math.atan2(dy,dx);
+  if(dx)player.facing=Math.sign(dx);
   [dx,dy]=unit(dx,dy);
   const movement=player.speed*(210/baseStats.speed)*dt;
   player.x=clamp(player.x+dx*movement,20,mapWidth-20);
@@ -793,6 +814,7 @@ function update(dt){
     if(elapsed>=(enemy.wheelReadyAt??0)&&wheels.some(wheel=>distance(wheel,enemy)<enemy.r+23)){
       enemy.wheelReadyAt=elapsed+wheelCooldown;
       damage(enemy,player.wheelDamage);player.wheelTimer=wheelCooldown;
+      if(elapsed>=player.attackUntil+.14)poseForAttack(enemy);
       if(player.evolved[1]){
         const [kx,ky]=unit(enemy.x-player.x,enemy.y-player.y);
         const force=enemy.name?24:55;
@@ -910,6 +932,26 @@ function paintHero(target,frame,moving){
   p(red,2,14+(frame%2),5,2);p(verm,1,16+(frame%2),4,2);p(red,17,13,5,2);p(verm,20,11+(frame%2),3,2);
   p(ink,20,7,2,13);p(gold,20,8,1,11);p(light,20,5,2,3);p(verm,19,7,4,1);
   target.restore();
+}
+function drawHero(target,pose,x,y,size,facing){
+  const {column,anchorX,anchorY}=heroPoses[pose];
+  target.save();
+  target.translate(Math.round(x),Math.round(y));
+  if(facing>0)target.scale(-1,1);
+  target.imageSmoothingEnabled=false;
+  target.drawImage(heroSheet,column*heroCellSize,0,heroCellSize,heroCellSize,
+    -anchorX/heroCellSize*size,-anchorY/heroCellSize*size,size,size);
+  target.restore();
+}
+function drawHeroPortrait(canvas){
+  const target=canvas.getContext('2d');
+  target.clearRect(0,0,canvas.width,canvas.height);
+  if(heroSheet.naturalWidth){
+    drawHero(target,'idle',canvas.width/2,canvas.height-7,canvas.width*.95,-1);
+  }else{
+    target.save();target.translate(12,3);target.scale(3,3);
+    paintHero(target,0,false);target.restore();
+  }
 }
 const sprites=new Map();
 function sprite(key,w,h,paint){
@@ -1099,10 +1141,17 @@ function draw(){
   }
   const {x,y}=player;
   pixel(ctx,'#18292e88',Math.round(x)-12,Math.round(y)+3,24,7);
-  const walk=player.moving&&mode==='play';
-  const heroFrame=Math.floor(elapsed*(walk?12:3))%4;
-  const actor=sprite('hero:'+walk+':'+heroFrame,24,28,layer=>paintHero(layer,heroFrame,walk));
-  drawActorSprite(actor,x,y+7,2.5,Math.cos(player.heading)<0);
+  const flying=player.moving&&mode==='play';
+  const attacking=player.attackUntil>elapsed;
+  if(heroSheet.naturalWidth){
+    const pose=attacking?'attack':flying?'fly':'idle';
+    const hover=attacking?0:Math.round(Math.sin(elapsed*(flying?15:5))*(flying?3:1));
+    drawHero(ctx,pose,x,y+7+hover,78,attacking?player.attackFacing:player.facing);
+  }else{
+    const frame=Math.floor(elapsed*(flying?12:3))%4;
+    const actor=sprite('hero:'+flying+':'+frame,24,28,layer=>paintHero(layer,frame,flying));
+    drawActorSprite(actor,x,y+7,2.5,player.facing<0);
+  }
   for(const spark of sparks){
     if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);
     else starShape(spark.x,spark.y,8+spark.life*35,'#fff1bf');
