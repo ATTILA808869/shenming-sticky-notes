@@ -67,6 +67,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                   {item.label}
                 </Link>
               ))}
+              {/* The game route serves a full HTML document. */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+              <a href="/games/nezha" className="shrink-0 rounded-full bg-temple-cream px-3 py-1.5 text-temple-red transition hover:bg-temple-peach md:bg-transparent md:px-0 md:py-0">
+                三太子遊戲
+              </a>
             </nav>
           </div>
         </header>

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>登入｜三太子守廟埕</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:16px;background:#26153e;color:#3a2050;font:16px system-ui,sans-serif}main{background:#fff4dc;width:min(100%,420px);border:3px solid #ffbd75;border-radius:24px;padding:28px;box-shadow:0 10px #140e28}small{color:#81422b}h1{margin:5px 0 22px;font-size:clamp(28px,8vw,40px)}form,label{display:grid;gap:8px}form{gap:14px}input,button{font:inherit;padding:10px;border-radius:10px;border:1px solid #7e638f}input{width:100%;background:white}button{font-weight:700;background:#ffd270;color:#331a46;cursor:pointer}button.secondary{background:transparent;margin-top:10px;width:100%}#status{color:#9a243b;min-height:1.35em;margin-bottom:0}[hidden]{display:none!important}
+</style>
+<main>
+<small>神明便利貼</small>
+<h1>三太子守廟埕</h1>
+<form id="auth" hidden>
+<label>帳號<input name="username" required minlength="3" maxlength="24" pattern="[a-zA-Z0-9_]+" autocomplete="username" autocapitalize="none"></label>
+<label>密碼<input id="password" name="password" type="password" required minlength="8" maxlength="128" autocomplete="current-password"></label>
+<label id="repeat" hidden>再輸入一次密碼<input id="confirm" name="confirm" type="password" minlength="8" maxlength="128" autocomplete="new-password"></label>
+<button id="submit" type="submit">登入</button>
+</form>
+<button id="switch" type="button" class="secondary" hidden>申請帳號</button>
+<form id="nickname" hidden>
+<label>設定遊戲暱稱<input name="nickname" required minlength="2" maxlength="16" autocomplete="nickname"></label>
+<button type="submit">儲存暱稱並開始</button>
+</form>
+<p id="status" role="status">正在確認登入狀態…</p>
+<a href="/" style="display:inline-block;margin-top:12px;color:#663750">返回神明便利貼</a>
+</main>
+<script>
+const auth=document.querySelector('#auth');
+const nickname=document.querySelector('#nickname');
+const toggle=document.querySelector('#switch');
+const status=document.querySelector('#status');
+const confirmField=document.querySelector('#confirm');
+const repeat=document.querySelector('#repeat');
+let registering=false;
+async function request(path,data){
+  const response=await fetch('/games/nezha/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
+  const result=await response.json();
+  if(!response.ok)throw new Error(result.error||'請稍後再試。');
+  return result;
+}
+function showAuth(){
+  nickname.hidden=true;auth.hidden=false;toggle.hidden=false;
+  repeat.hidden=!registering;confirmField.required=registering;confirmField.value='';
+  document.querySelector('#password').autocomplete=registering?'new-password':'current-password';
+  document.querySelector('#submit').textContent=registering?'建立帳號':'登入';
+  toggle.textContent=registering?'已有帳號，回登入':'申請帳號';
+}
+function signedIn(result){
+  if(result.nickname){location.replace('/games/nezha/game');return;}
+  status.textContent='';
+  auth.hidden=true;toggle.hidden=true;nickname.hidden=false;
+  nickname.elements.nickname.focus();
+}
+toggle.onclick=()=>{registering=!registering;status.textContent='';showAuth();};
+async function submitForm(event,action){
+  event.preventDefault();
+  const form=event.currentTarget;
+  const button=form.querySelector('button');
+  const values=Object.fromEntries(new FormData(form));
+  button.disabled=true;toggle.disabled=true;status.textContent='';
+  try{signedIn(await request(action,values));}
+  catch(error){status.textContent=error.message;}
+  finally{button.disabled=false;toggle.disabled=false;}
+}
+auth.addEventListener('submit',event=>submitForm(event,registering?'register':'login'));
+nickname.addEventListener('submit',event=>submitForm(event,'nickname'));
+request('session').then(result=>{
+  status.textContent='';
+  if(result.authenticated)signedIn(result);
+  else showAuth();
+}).catch(()=>{status.textContent='連線失敗，請重新整理。';});
+</script>
+</html>

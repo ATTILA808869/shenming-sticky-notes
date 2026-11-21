@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, BadgeCheck } from "lucide-react";
+import { ArrowRight, BadgeCheck, Gamepad2 } from "lucide-react";
 import { CulturalProductShowcase } from "@/components/CulturalProductShowcase";
 import { HeroImageCarousel } from "@/components/HeroImageCarousel";
 import { getHomeContent } from "@/lib/storefront-data";
@@ -39,6 +39,11 @@ export default async function HomePage() {
               <ArrowRight size={18} />
             </Link>
             <Link href="/about" className="btn-secondary py-3">看品牌故事</Link>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a href="/games/nezha" className="btn-secondary py-3">
+              <Gamepad2 size={18} aria-hidden="true" />
+              玩三太子守廟埕
+            </a>
           </div>
         </div>
         <div className="order-2">
