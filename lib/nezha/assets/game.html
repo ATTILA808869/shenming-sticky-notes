@@ -113,7 +113,10 @@ const contactHitInterval = 0.5;
 const rewardInterval = 6;
 const mapWidth = 2880;
 const mapHeight = 2160;
-const wheelRadius = 72;
+const wheelOrbitRadius = 96;
+const wheelHitRadius = 23;
+const wheelEvolutionScale = Math.SQRT2;
+const maxWheels = 8;
 const pickupRadius = 2 * 48;
 const bossStages = [
   {at:120,name:'超級大幽靈',hp:210,attack:22,speed:70,r:35,color:'#e9d8ff',interval:3.5},
@@ -255,8 +258,20 @@ for(const name of ['pointerup','pointercancel','lostpointercapture'])canvas.addE
 function wheelPoints(){
   return Array.from({length:player.wheels},(_,i)=>{
     const angle=player.wheelAngle+i*2*Math.PI/player.wheels;
-    return {x:player.x+Math.cos(angle)*wheelRadius,y:player.y+Math.sin(angle)*wheelRadius};
+    return {x:player.x+Math.cos(angle)*wheelOrbitRadius,y:player.y+Math.sin(angle)*wheelOrbitRadius};
   });
+}
+function wheelSweepsEnemy(enemy,start,sweep,hitRadius){
+  const dx=enemy.x-player.x,dy=enemy.y-player.y;
+  const gap=Math.hypot(dx,dy),reach=enemy.r+hitRadius;
+  if(Math.abs(gap-wheelOrbitRadius)>=reach)return false;
+  // Even spacing reduces all the wheel arcs to one repeating sector.
+  const spacing=2*Math.PI/player.wheels;
+  const relative=(Math.atan2(dy,dx)-start)%spacing;
+  const offset=relative<0?relative+spacing:relative;
+  if(offset<=sweep)return true;
+  const angleGap=Math.min(offset-sweep,spacing-offset);
+  return gap*gap+wheelOrbitRadius*wheelOrbitRadius-2*gap*wheelOrbitRadius*Math.cos(angleGap)<reach*reach;
 }
 const challengeTime=()=>time+towerTime;
 function attackGrowth(){
@@ -457,7 +472,7 @@ function showUpgrades(first=false){
     }
     if(!player.wheels)option(1,...unlocks[1]);
     else {
-      if(player.wheels<4)skill(1,'數量＋1',()=>player.wheels++);
+      if(player.wheels<maxWheels)skill(1,'數量＋1',()=>player.wheels++);
       skill(1,'傷害＋6',()=>player.wheelDamage+=6);
       skill(1,'旋轉速度＋20%',()=>player.wheelSpeed*=1.2);
     }
@@ -689,7 +704,6 @@ function useSkills(dt,enemies){
     if(brick.ingot)ingots.push({x:brick.x,y:brick.y,life:10});
     return false;
   });
-  player.wheelAngle=(player.wheelAngle+player.wheelSpeed*dt)%(2*Math.PI);
 }
 function heal(fraction){
   player.hp=Math.min(player.maxHp,player.hp+player.maxHp*fraction);
@@ -814,10 +828,12 @@ function update(dt){
   updateSpawns(dt);
   const enemies=boss?[...mobs,boss]:mobs;
   useSkills(dt,enemies);
-  const wheels=wheelPoints();
+  const wheelStart=player.wheelAngle,wheelSweep=player.wheelSpeed*dt;
+  const hitRadius=wheelHitRadius*(player.evolved[1]?wheelEvolutionScale:1);
+  player.wheelAngle=(wheelStart+wheelSweep)%(2*Math.PI);
   trailTimer-=dt;
   if(player.evolved[1]&&trailTimer<=0){
-    wheelTrail.push(...wheels.map(wheel=>({...wheel,life:.32})));
+    wheelTrail.push(...wheelPoints().map(wheel=>({...wheel,life:.32})));
     trailTimer=.035;
   }
   wheelTrail=wheelTrail.filter(flame=>(flame.life-=dt)>0);
@@ -826,7 +842,7 @@ function update(dt){
   for(const enemy of enemies){
     if(enemy.hp<=0)continue;
     enemy.flash-=dt;enemy.stun-=dt;
-    if(elapsed>=(enemy.wheelReadyAt??0)&&wheels.some(wheel=>distance(wheel,enemy)<enemy.r+23)){
+    if(player.wheels&&elapsed>=(enemy.wheelReadyAt??0)&&wheelSweepsEnemy(enemy,wheelStart,wheelSweep,hitRadius)){
       enemy.wheelReadyAt=elapsed+wheelCooldown;
       damage(enemy,player.wheelDamage);player.wheelTimer=wheelCooldown;
       if(elapsed>=player.attackUntil+.14)poseForAttack(enemy);
@@ -1135,16 +1151,17 @@ function draw(){
     circle(shot.x,shot.y,11,null,'#ffd65e',4);
     starShape(shot.x+8,shot.y-8,5,'#fff0ac');
   }
+  const wheelScale=player.evolved[1]?wheelEvolutionScale:1;
   for(const flame of wheelTrail){
     ctx.globalAlpha=flame.life/.32;
-    circle(flame.x,flame.y,5+flame.life*26,'#ff7034');
-    circle(flame.x,flame.y,3+flame.life*14,'#ffe477');
+    circle(flame.x,flame.y,(5+flame.life*26)*wheelScale,'#ff7034');
+    circle(flame.x,flame.y,(3+flame.life*14)*wheelScale,'#ffe477');
   }
   ctx.globalAlpha=1;
   for(const wheel of wheelPoints()){
-    circle(wheel.x,wheel.y,22,'#ff6f4d','#71354d',3);
-    circle(wheel.x,wheel.y,10,null,'#ffd575',4);
-    starShape(wheel.x,wheel.y,7,'#fff3b7');
+    circle(wheel.x,wheel.y,22*wheelScale,'#ff6f4d','#71354d',3);
+    circle(wheel.x,wheel.y,10*wheelScale,null,'#ffd575',4);
+    starShape(wheel.x,wheel.y,7*wheelScale,'#fff3b7');
   }
   for(const brick of bricks){
     const t=clamp(1-brick.left/.44,0,1);
