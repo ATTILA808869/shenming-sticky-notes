@@ -22,6 +22,12 @@
 .account button{padding:5px 8px;flex-shrink:0}.account #nickname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header strong{display:block;white-space:nowrap}
 .ranking{max-height:25vh;overflow:auto;text-align:left;padding-left:28px}.ranking li{padding:4px}.card [role=status]{font-size:14px}
+.ranking li{overflow-wrap:anywhere}.ranking-message{display:block;color:#69455a;white-space:pre-wrap;font-size:14px}
+.ranking-editor{display:grid;gap:6px;margin:12px 0;text-align:left}
+.ranking-editor label{font-weight:700;font-size:14px}
+.ranking-editor textarea{width:100%;min-height:66px;resize:vertical;padding:7px 9px;border:1px solid #906278;border-radius:8px;background:#fffdf7;color:#3e224c;font:inherit}
+.ranking-editor button{justify-self:start;padding:5px 12px}
+.ranking-editor [role=status]{color:#69455a;overflow-wrap:anywhere}
 </style>
 <main>
 <header><div><a href="/" style="color:inherit"><small>神明便利貼</small></a><strong>三太子守廟埕</strong></div><div class="account"><span id="nickname"></span><button id="logout">登出</button><button id="pause" disabled>暫停</button></div></header>
@@ -142,6 +148,7 @@ function togglePause(){
 }
 pause.onclick=togglePause;
 document.addEventListener('keydown',event=>{
+  if(event.target instanceof HTMLTextAreaElement)return;
   const key=event.key.toLowerCase();
   if(mode!=='play'&&/^[1-4]$/.test(key)&&!event.altKey&&!event.ctrlKey&&!event.metaKey){
     const choice=optionButtons[Number(key)-1];
@@ -326,6 +333,48 @@ async function accountRequest(path,data){
   if(!response.ok)throw new Error(result.error||'請稍後再試。');
   return result;
 }
+function addLeaderboardEditor(score,messageLabel,list){
+  const form=document.createElement('form');
+  form.className='ranking-editor';
+  const label=document.createElement('label');
+  label.htmlFor='ranking-message-input';
+  const updateLabel=count=>{
+    label.textContent='排行榜留言（剩 '+count+' 次，最多 80 字，可宣傳品牌）';
+  };
+  updateLabel(score.messageCredits);
+  const input=document.createElement('textarea');
+  input.id=label.htmlFor;
+  input.rows=2;
+  input.maxLength=80;
+  input.value=score.message??'';
+  input.required=true;
+  const save=document.createElement('button');
+  save.type='submit';
+  save.textContent='儲存留言';
+  const status=document.createElement('div');
+  status.setAttribute('role','status');
+  form.append(label,input,save,status);
+  list.before(form);
+
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(save.disabled)return;
+    save.disabled=true;
+    input.readOnly=true;
+    status.textContent='';
+    try{
+      const {message,messageCredits}=await accountRequest('leaderboard/message',{message:input.value});
+      messageLabel.textContent=message;
+      status.textContent='留言已刊登。';
+      if(messageCredits>0){
+        updateLabel(messageCredits);
+      }else{
+        label.remove();input.remove();save.remove();
+      }
+    }catch(error){status.textContent=error.message;}
+    finally{save.disabled=false;input.readOnly=false;}
+  });
+}
 async function showLeaderboard(back){
   setMode('done');
   panel('無限塔排行榜','',[['返回',back]]);
@@ -339,12 +388,17 @@ async function showLeaderboard(back){
       : '目前還沒有紀錄。通過無限塔第 1 層後即可公開成績。';
     if(!scores.length)return;
     const list=document.createElement('ol');list.className='ranking';
+    status.after(list);
     for(const score of scores){
       const row=document.createElement('li');
       row.textContent=score.nickname+' · 通過第 '+score.cleared+' 層';
+      const messageLabel=document.createElement('span');
+      messageLabel.className='ranking-message';
+      messageLabel.textContent=score.message??'';
+      row.append(messageLabel);
       list.append(row);
+      if(score.messageCredits>0)addLeaderboardEditor(score,messageLabel,list);
     }
-    status.after(list);
   }catch(error){status.textContent=error.message;}
 }
 function finish(won){
@@ -360,6 +414,7 @@ function finish(won){
     try{
       const result=await accountRequest('score',record);
       status.textContent=result.updated?'已儲存最高通過樓層。':'已保留你原有的最高通過樓層。';
+      if(result.earnedMessage)status.textContent+=' 恭喜刷新名次！可到排行榜留言一次。';
     }catch(error){status.textContent=error.message;button.disabled=false;}
   }]);
   panel(won?'本局結束':'再試一次吧！',

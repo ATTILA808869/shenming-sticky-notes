@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, cookieName, GameError, gamePath, gameSession, limitAttempts, sessionSeconds } from "@/lib/nezha/session";
-import { getScores, saveScore } from "@/lib/nezha/scores";
+import { getScores, saveLeaderboardMessage, saveScore } from "@/lib/nezha/scores";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,9 +116,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         const session = await gameSession(request);
         return json({ authenticated: Boolean(session), nickname: session?.account.nickname ?? null });
       }
-      case "api/leaderboard":
-        if ((await gameSession(request))?.account.nickname) return json({ scores: await getScores() });
+      case "api/leaderboard": {
+        const session = await gameSession(request);
+        if (session?.account.nickname) return json({ scores: await getScores(session.account.id) });
         break;
+      }
       default:
         return json({ error: "找不到頁面。" }, 404);
     }
@@ -157,12 +159,19 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       if (result.count === 0) throw new GameError(409, "暱稱已設定。");
       return json({ nickname });
     }
+    if (path === "api/leaderboard/message") {
+      if (!account.nickname) throw new GameError(403, "請先設定暱稱。");
+      if (await limitAttempts(`leaderboard-message:${account.id}`, 8)) {
+        throw new GameError(429, "送出太頻繁，請稍後再試。");
+      }
+      return json(await saveLeaderboardMessage(data.message, account.id));
+    }
     if (path === "api/score") {
       if (!account.nickname) throw new GameError(403, "請先設定暱稱。");
       if (await limitAttempts(`score:${account.id}`, 12)) {
         throw new GameError(429, "送出太頻繁，請稍後再試。");
       }
-      return json({ updated: await saveScore(data, account.id) });
+      return json(await saveScore(data, account.id));
     }
     return json({ error: "找不到頁面。" }, 404);
   } catch (error) {

@@ -110,12 +110,14 @@ model NezhaSession {
 }
 
 model NezhaScore {
-  accountId  String       @id
-  account    NezhaAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  cleared    Int
-  progress   Int
-  kills      Int
-  recordedAt DateTime     @default(now())
+  accountId      String       @id
+  account        NezhaAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  cleared        Int
+  progress       Int
+  kills          Int
+  recordedAt     DateTime     @default(now())
+  message        String?      @db.VarChar(80)
+  messageCredits Int?
 
   @@index([cleared(sort: Desc), progress(sort: Desc), kills(sort: Desc), recordedAt, accountId])
 }
