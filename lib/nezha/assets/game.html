@@ -53,6 +53,7 @@ const hero = new Image();
 hero.src = '/games/nezha/nezha.webp';
 const keys = new Set();
 const rounds = 480;
+const contactHitInterval = 0.5;
 const mapWidth = 2880;
 const mapHeight = 2160;
 const wheelRadius = 72;
@@ -100,7 +101,7 @@ function reset(){
     wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
     skillLevels:[0,0,0], evolved:[false,false,false], gear:[0,0,0,0],
     healTimer:0,
-    invincible:0,moving:false,heading:0};
+    moving:false,heading:0};
   mobs=[]; stars=[]; sparks=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
   towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
@@ -383,7 +384,7 @@ function enterFloor(){
   boss=null;mobs=[];stars=[];drops=[];shots=[];bricks=[];warnings=[];ingots=[];sparks=[];wheelTrail=[];
   player.healTimer=0;
   player.x=mapWidth/2;player.y=mapHeight/2;
-  heal(.25);player.invincible=2;
+  heal(.25);
   trackCamera();setMode('play');
 }
 function floorCleared(){
@@ -417,9 +418,7 @@ function damage(enemy,value){
   sparks.push({x:enemy.x,y:enemy.y,life:.22,r:8});
 }
 function hurt(value){
-  if(player.invincible>0)return;
   player.hp=Math.max(0,player.hp-Math.max(1,Math.round(value*100/(100+player.defense))));
-  player.invincible=.85;
 }
 function useSkills(dt,enemies){
   player.ringTimer-=dt;player.brickTimer-=dt;
@@ -570,7 +569,6 @@ function update(dt){
   player.x=clamp(player.x+dx*movement,20,mapWidth-20);
   player.y=clamp(player.y+dy*movement,45,mapHeight-25);
   trackCamera();
-  player.invincible-=dt;
   if(!boss){
     spawn-=dt;
     if(spawn<=0){
@@ -605,13 +603,20 @@ function update(dt){
         enemy.y=clamp(enemy.y+ky*force,15,mapHeight-15);
       }
     }
-    if(enemy.hp<=0||enemy.stun>0)continue;
-    const gap=distance(player,enemy);
-    if(gap>enemy.r+12){
+    if(enemy.hp<=0||enemy.stun>0){
+      enemy.nextContactHitAt=undefined;
+      continue;
+    }
+    if(distance(player,enemy)>enemy.r+12){
       const [mx,my]=unit(player.x-enemy.x,player.y-enemy.y);
       enemy.x+=mx*enemy.speed*dt;enemy.y+=my*enemy.speed*dt;
     }
-    if(gap<=enemy.r+16)hurt(enemyAttack(enemy));
+    if(distance(player,enemy)>enemy.r+16){
+      enemy.nextContactHitAt=undefined;
+    }else if(elapsed>=(enemy.nextContactHitAt??0)){
+      hurt(enemyAttack(enemy));
+      enemy.nextContactHitAt=elapsed+contactHitInterval;
+    }
   }
   separateEnemies(enemies);
   if(boss&&boss.hp>0&&boss.stun<=0){
@@ -803,7 +808,6 @@ function draw(){
   }
   const {x,y}=player;
   circle(x,y+10,17,'#35234790');
-  if(player.invincible>0){ctx.globalAlpha=.7;circle(x,y,30,null,'#fff1a2',2);}
   if(hero.naturalWidth){
     const h=68,w=h*hero.naturalWidth/hero.naturalHeight;
     ctx.drawImage(hero,x-w/2,y-h+15+(player.moving?Math.sin(elapsed*20)*2:0),w,h);
@@ -812,7 +816,6 @@ function draw(){
     circle(x,y+5,14,'#df4e55','#fff2d5');circle(x,y-9,16,'#ffd3a2','#41283c');
     circle(x-5,y-8,2,'#41283c');circle(x+5,y-8,2,'#41283c');circle(x,y-17,2,'#df4e55');
   }
-  ctx.globalAlpha=1;
   for(const spark of sparks){
     if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);
     else starShape(spark.x,spark.y,8+spark.life*35,'#fff1bf');
