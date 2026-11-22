@@ -233,7 +233,7 @@ function reset(){
     xp:0,level:1,rings:0,ringDamage:baseStats.attack,pattern:0,wheels:0,wheelDamage:15,
     wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
     skillLevels:[0,0,0], skillRoutes:[null,null,null], skillTome:false, evolved:[false,false,false], gear:[0,0,0,0],
-    healTimer:0,
+    healTimer:0,deathCause:null,
     moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1};
   mobs=[]; stars=[]; sparks=[]; qiBolts=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
   magnetEffect=null;
@@ -532,7 +532,7 @@ function rollUpgradeOption(choices){
   const alternatives=choices.filter(choice=>choice!==favorite);
   return alternatives[Math.floor(Math.random()*alternatives.length)];
 }
-function gearUpgradeChoices(){
+function gearUpgradeChoices(resume=()=>setMode('play')){
   const options=[];
   function add(index,label,apply){
     const level=player.gear[index];
@@ -552,23 +552,28 @@ function gearUpgradeChoices(){
     player.maxHp+=healthGain;
     player.hp=Math.min(player.maxHp,player.hp+healthGain);
   }:null);
-  return options.map(([label,apply])=>[label,apply?()=>{apply();applyEvolutions();setMode('play');}:null]);
+  return options.map(([label,apply])=>[label,apply?()=>{apply();applyEvolutions();resume();}:null]);
 }
-function showGearReward(){
-  const upgrades=gearUpgradeChoices();
+function continueAfterGearRewards(resume=()=>setMode('play')){
+  if(!showGearReward(resume))resume();
+}
+function showGearReward(resume=()=>setMode('play')){
+  if(gearRewards<=0)return false;
+  const upgrades=gearUpgradeChoices(()=>continueAfterGearRewards(resume));
   if(!upgrades.some(([,apply])=>apply)){gearRewards=0;return false;}
   gearRewards--;
+  nextRewardAt=elapsed+rewardInterval;
   setMode('upgrade');
   panel('小魔王戰利品','選一件道具強化三太子。',upgrades);
   return true;
 }
-function showUpgrades(){
-  const options=gearUpgradeChoices();
+function showUpgrades(resume=()=>setMode('play')){
+  const options=gearUpgradeChoices(resume);
   const openSlot=hasFreeSkillSlot();
   skillUnlocks.forEach(([label],index)=>{
     const level=player.skillLevels[index];
     if(!level){
-      if(openSlot)options.push([label,()=>chooseSkill(index)]);
+      if(openSlot)options.push([label,()=>chooseSkill(index,resume)]);
       return;
     }
     const name=player.evolved[index]?evolvedNames[index]:skillNames[index];
@@ -581,7 +586,7 @@ function showUpgrades(){
     skillUpgradeRoutes[index].forEach(route=>{
       if(route.available&&!route.available())return;
       routes.push([name+' Lv.'+(level+1)+'・'+route.label+requirement,()=>{
-        route.apply();player.skillLevels[index]++;applyEvolutions();setMode('play');
+        route.apply();player.skillLevels[index]++;applyEvolutions();resume();
       },route.key===player.skillRoutes[index]]);
     });
     options.push(rollUpgradeOption(routes));
@@ -591,7 +596,7 @@ function showUpgrades(){
     const qiOptions=[];
     function upgradeQi(label,apply){
       qiOptions.push(['基礎氣功強化 '+(qi.rank+1)+'・'+label,()=>{
-        apply();qi.rank++;setMode('play');
+        apply();qi.rank++;resume();
       }]);
     }
     if(qi.cooldown>qiMinCooldown){
@@ -602,11 +607,33 @@ function showUpgrades(){
     upgradeQi('人物攻擊力＋'+qiAttackGain,()=>player.attack+=qiAttackGain);
     options.push(rollUpgradeOption(qiOptions));
   }else options.push(['基礎氣功・已達上限',null]);
-  if(!options.some(([,apply])=>apply))return;
+  if(!options.some(([,apply])=>apply))return false;
   setMode('upgrade');
   const milestone=player.level%milestoneLevels===0?'總攻擊力與總防禦力再＋5%。':'';
   const actions=panel('升到 '+player.level+' 級','攻擊力＋'+attackGainPerLevel+'、防禦力＋'+defenseGainPerLevel+'。'+milestone,options);
   actions.classList.add('level-up-actions');
+  return true;
+}
+function advanceLevel(){
+  const requiredXP=needed();
+  if(player.xp<requiredXP)return false;
+  player.xp-=requiredXP;
+  player.level++;
+  player.attack+=attackGainPerLevel;
+  player.defense+=defenseGainPerLevel;
+  if(player.level%milestoneLevels===0){
+    player.attack*=milestoneStatFactor;
+    player.defense*=milestoneStatFactor;
+  }
+  nextRewardAt=elapsed+rewardInterval;
+  return true;
+}
+function continueBossLevelUps(resume){
+  while(advanceLevel()){
+    // Each choice applies before calculating the next level's stats or available cards.
+    if(showUpgrades(()=>continueBossLevelUps(resume)))return;
+  }
+  resume();
 }
 async function accountRequest(path,data){
   const response=await fetch('/games/nezha/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
@@ -699,8 +726,9 @@ function finish(won){
       if(result.earnedMessage)status.textContent+=' 恭喜刷新名次！可到排行榜留言一次。';
     }catch(error){status.textContent=error.message;button.disabled=false;}
   }]);
+  const deathText=!won&&player.deathCause?' 死亡原因：'+player.deathCause+'。':'';
   panel(won?'本局結束':'再試一次吧！',
-    (towerFloor?'無限塔通過 '+clearedFloors+' 層。':'生存計時 '+formatTime(time)+'。')+' 等級 '+player.level+'，總擊退 '+kills+' 隻敵人。',choices,true);
+    (towerFloor?'無限塔通過 '+clearedFloors+' 層。':'生存計時 '+formatTime(time)+'。')+' 等級 '+player.level+'，總擊退 '+kills+' 隻敵人。'+deathText,choices,true);
 }
 function formatTime(seconds){
   const value=Math.floor(seconds+.00001);
@@ -775,8 +803,10 @@ function applyHit(enemy,amount){
 function damage(enemy,value){
   applyHit(enemy,value*player.attack/baseStats.attack);
 }
-function hurt(value){
+function hurt(value,source){
+  if(player.hp<=0)return;
   player.hp=Math.max(0,player.hp-Math.max(1,Math.round(value*100/(100+player.defense))));
+  if(player.hp===0)player.deathCause=source;
 }
 function poseForAttack(target){
   const dx=target.x-player.x;
@@ -879,7 +909,7 @@ function useEnemyAbility(enemy,allies,gap){
   }else if(enemy.kind==='caster'&&gap<=280){
     enemy.abilityAt=elapsed+6;
     if(warnings.filter(mark=>mark.kind==='seal').length>=3)return;
-    warnings.push({x:player.x,y:player.y,r:30,life:1.15,duration:1.15,damage:enemy.attack,kind:'seal'});
+    warnings.push({x:player.x,y:player.y,r:30,life:1.15,duration:1.15,damage:enemy.attack,kind:'seal',source:'施法怪的封印'});
     enemy.castingUntil=elapsed+.4;
   }
 }
@@ -1053,12 +1083,10 @@ function update(dt){
         const force=enemy.name?24:55;
         enemy.x=clamp(enemy.x+kx*force,15,mapWidth-15);
         enemy.y=clamp(enemy.y+ky*force,15,mapHeight-15);
+        enemy.knockedBackAt=elapsed;
       }
     }
-    if(enemy.hp<=0||enemy.stun>0){
-      enemy.nextContactHitAt=undefined;
-      continue;
-    }
+    if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed)continue;
     const gap=distance(player,enemy);
     if(enemy.kind==='healer'||enemy.kind==='caster')useEnemyAbility(enemy,enemies,gap);
     const followRange=enemy.kind==='caster'?175:enemy.kind==='healer'?100:enemy.r+12;
@@ -1067,14 +1095,17 @@ function update(dt){
       enemy.x+=mx*enemy.speed*dt;enemy.y+=my*enemy.speed*dt;
       if(Math.abs(mx)>.08)enemy.facing=Math.sign(mx);
     }
-    if(distance(player,enemy)>enemy.r+16){
+  }
+  separateEnemies(enemies);
+  // Contact must match the settled positions that the player sees after knockback and separation.
+  for(const enemy of enemies){
+    if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed||distance(player,enemy)>enemy.r+16){
       enemy.nextContactHitAt=undefined;
     }else if(elapsed>=(enemy.nextContactHitAt??0)){
-      hurt(enemyAttack(enemy));
+      hurt(enemyAttack(enemy),(enemy.name??'怪物')+'撞擊');
       enemy.nextContactHitAt=elapsed+contactHitInterval;
     }
   }
-  separateEnemies(enemies);
   if(boss&&boss.hp>0&&boss.stun<=0){
     boss.cast-=dt;
     if(boss.cast<=0){
@@ -1084,14 +1115,14 @@ function update(dt){
         const offset=(i-(spread-1)/2)*76;
         warnings.push({x:clamp(player.x+offset,20,mapWidth-20),
           y:clamp(player.y+(i%2?52:0),20,mapHeight-20),
-          r:boss.at===480?57:48,life:1.25,duration:1.25,damage:enemyAttack(boss)});
+          r:boss.at===480?57:48,life:1.25,duration:1.25,damage:enemyAttack(boss),source:boss.name+'的範圍攻擊'});
       }
     }
   }
   warnings=warnings.filter(mark=>{
     mark.life-=dt;
     if(mark.life>0)return true;
-    if(distance(mark,player)<mark.r)hurt(mark.damage);
+    if(distance(mark,player)<mark.r)hurt(mark.damage,mark.source);
     sparks.push({x:mark.x,y:mark.y,life:.32,r:mark.r});
     return false;
   });
@@ -1125,30 +1156,25 @@ function update(dt){
     if(towerFloor||nextBoss===bossStages.length){
       const tomeFound=towerFloor>0&&!player.skillTome&&Math.random()<skillTomeChance;
       if(tomeFound)player.skillTome=true;
-      boss=null;floorCleared(rewardXP,tomeFound);return;
+      boss=null;
+      const finishRewards=()=>continueAfterGearRewards(()=>floorCleared(rewardXP,tomeFound));
+      if(rewardXP)continueBossLevelUps(finishRewards);
+      else finishRewards();
+      return;
     }
     sparks.push({x:boss.x,y:boss.y,value:rewardXP,life:bossXPNoticeTime,kind:'boss-xp'});
     dropItem(boss);
     boss=null;
+    if(rewardXP&&player.xp>=needed()){
+      continueBossLevelUps(continueAfterGearRewards);
+      return;
+    }
   }
   if(towerFloor&&!boss&&floorKills>=towerGoal)spawnTowerGuardian();
   sparks=sparks.filter(s=>(s.life-=dt)>0);
+  if(showGearReward())return;
   if(elapsed<nextRewardAt||(magnetEffect&&elapsed<magnetEffect.rewardAt))return;
-  const requiredXP=needed();
-  if(gearRewards>0&&showGearReward()){
-    nextRewardAt=elapsed+rewardInterval;
-  }else if(player.xp>=requiredXP){
-    player.xp-=requiredXP;
-    player.level++;
-    player.attack+=attackGainPerLevel;
-    player.defense+=defenseGainPerLevel;
-    if(player.level%milestoneLevels===0){
-      player.attack*=milestoneStatFactor;
-      player.defense*=milestoneStatFactor;
-    }
-    nextRewardAt=elapsed+rewardInterval;
-    showUpgrades();
-  }
+  if(advanceLevel())showUpgrades();
 }
 function circle(x,y,r,fill,stroke,line=2){
   ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
