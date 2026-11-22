@@ -124,6 +124,10 @@ heroSheet.addEventListener('error',()=>{
 });
 const keys = new Set();
 const rounds = 480;
+const lateStoryXPStart = 300;
+const lateStoryXPFullAt = 450;
+const storyFinalMonsterXP = 20;
+const bossXPNoticeTime = 1.2;
 const contactHitInterval = 0.5;
 const rewardInterval = 6;
 const mapWidth = 2880;
@@ -140,9 +144,9 @@ const magnetFlightTime = .9;
 const magnetPulseTime = .55;
 const maxMagnetFlights = 180;
 const bossStages = [
-  {at:120,name:'超級大幽靈',hp:210,attack:22,speed:70,r:35,color:'#e9d8ff',interval:3.5},
-  {at:300,name:'重甲幽靈',hp:465,attack:32,speed:59,r:42,color:'#b8b0ee',interval:2.8},
-  {at:480,name:'超級龍王',hp:870,attack:42,speed:87,r:49,color:'#61d9a5',interval:2.7}
+  {at:120,name:'超級大幽靈',xp:500,hp:210,attack:22,speed:70,r:35,color:'#e9d8ff',interval:3.5},
+  {at:300,name:'重甲幽靈',xp:500,hp:465,attack:32,speed:59,r:42,color:'#b8b0ee',interval:2.8},
+  {at:480,name:'超級龍王',xp:1000,hp:870,attack:42,speed:87,r:49,color:'#61d9a5',interval:2.7}
 ];
 const maxMoveSpeed=100;
 const maxHealth=2000;
@@ -150,7 +154,8 @@ const maxUpgradeLevel=25;
 const attackGainPerLevel=1;
 const defenseGainPerLevel=.5;
 const enemyReferenceAttackGain=.5;
-const baseQi={damage:14,cooldown:1.05,targets:1};
+const baseQi={cooldown:1.05,targets:1};
+const qiAttackGain=3;
 const qiRange=360;
 const qiSpeed=680;
 const qiMinCooldown=.35;
@@ -206,7 +211,7 @@ function trackCamera(){
 }
 function reset(){
   player = {x:mapWidth/2,y:mapHeight/2,hp:baseStats.hp,maxHp:baseStats.hp,defense:baseStats.defense,attack:baseStats.attack,speed:baseStats.speed,
-    qi:{...baseQi,level:1,timer:0},
+    qi:{...baseQi,rank:1,timer:0,attackBonus:0},
     xp:0,level:1,rings:0,ringDamage:baseStats.attack,pattern:0,wheels:0,wheelDamage:15,
     wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
     skillLevels:[0,0,0], evolved:[false,false,false], gear:[0,0,0,0],
@@ -323,8 +328,8 @@ function skillAttackGrowth(){
   return skillGrowth;
 }
 function currentEnemyBalance(){
-  // Faster player attack growth should not raise the existing enemy difficulty curve.
-  const referenceAttack=player.attack-(player.level-1)*(attackGainPerLevel-enemyReferenceAttackGain);
+  // Preserve the enemy curve without scaling it up for the player's attack bonuses.
+  const referenceAttack=player.attack-(player.level-1)*(attackGainPerLevel-enemyReferenceAttackGain)-player.qi.attackBonus;
   const durability=(player.maxHp/baseStats.hp)*(100+player.defense)/(100+baseStats.defense);
   const ringVolley=player.rings*player.ringDamage*(player.evolved[0]?1.5:1);
   const wheelSweep=player.wheels*player.wheelDamage;
@@ -432,9 +437,21 @@ function needed(){
   if(targetLevel===41)return 2855;
   return regularLevelXP(targetLevel);
 }
+function timeBasedEnemyXP(seconds){
+  const minutes=Math.floor(seconds/60);
+  return 1+minutes+Math.floor(minutes/3);
+}
 function enemyXP(enemy){
-  const minutes=Math.floor((towerBaseline?.time??challengeTime())/60);
-  const base=1+minutes+Math.floor(minutes/3)+baseTowerFloor()*2;
+  const seconds=towerBaseline?.time??challengeTime();
+  let base=timeBasedEnemyXP(seconds);
+  if(towerFloor){
+    // Carry the story bonus into the tower without changing its time or floor growth.
+    base+=storyFinalMonsterXP-timeBasedEnemyXP(rounds)+baseTowerFloor()*2;
+  }else if(seconds>=lateStoryXPStart){
+    const progress=clamp((seconds-lateStoryXPStart)/(lateStoryXPFullAt-lateStoryXPStart),0,1);
+    const startingXP=timeBasedEnemyXP(lateStoryXPStart);
+    base=Math.max(base,startingXP+Math.floor((storyFinalMonsterXP-startingXP)*progress));
+  }
   return base*(enemy.mini?3:1);
 }
 const skillNames=['乾坤圈','超級風火輪','超級金磚'];
@@ -523,10 +540,10 @@ function showUpgrades(){
   else if(player.bricks<5)skill(2,'投擲數量＋1',()=>player.bricks++);
   else skill(2,'傷害＋8',()=>player.brickDamage+=8);
   const qi=player.qi;
-  if(qi.level<maxUpgradeLevel){
+  if(qi.rank<maxUpgradeLevel){
     function upgradeQi(label,apply){
-      option('qi','基礎氣功 Lv.'+(qi.level+1)+'・'+label,()=>{
-        apply();qi.level++;setMode('play');
+      option('qi','基礎氣功強化 '+(qi.rank+1)+'・'+label,()=>{
+        apply();qi.rank++;setMode('play');
       });
     }
     if(qi.cooldown>qiMinCooldown){
@@ -534,7 +551,10 @@ function showUpgrades(){
       upgradeQi('攻速提升・間隔 '+nextCooldown.toFixed(2)+' 秒',()=>{qi.cooldown=nextCooldown;});
     }
     if(qi.targets<qiMaxTargets)upgradeQi('目標數＋1',()=>qi.targets++);
-    upgradeQi('氣功傷害＋3',()=>qi.damage+=3);
+    upgradeQi('人物攻擊力＋'+qiAttackGain,()=>{
+      qi.attackBonus+=qiAttackGain;
+      player.attack+=qiAttackGain;
+    });
   }
   availableGearUpgrades().forEach(([label,apply],index)=>option('gear'+index,label,chooseGear(apply)));
   if(!groups.size)return;
@@ -669,12 +689,13 @@ function enterFloor(){
   heal(.25);
   trackCamera();setMode('play');
 }
-function floorCleared(){
+function floorCleared(rewardXP=0){
   const mainStory=towerFloor===0;
   clearedFloors=towerFloor;
   setMode('upgrade');
+  const rewardText=rewardXP?'獲得 '+rewardXP+' XP。':'';
   panel(mainStory?'超級龍王退散！':'無限塔第 '+towerFloor+' 層通過',
-    '保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王。',
+    rewardText+'保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王。',
     [[mainStory?'進入無限塔第 1 層':'前往第 '+(towerFloor+1)+' 層',enterFloor],['結束本局',()=>finish(true)]],true);
 }
 function spawnTowerGuardian(){
@@ -698,9 +719,12 @@ function nearestTargets(enemies){
   return enemies.filter(enemy=>enemy.hp>0&&distance(enemy,player)<490)
     .sort((a,b)=>distance(a,player)-distance(b,player));
 }
-function damage(enemy,value){
-  enemy.hp-=Math.round(value*player.attack/baseStats.attack); enemy.flash=.15;
+function applyHit(enemy,amount){
+  enemy.hp-=Math.round(amount); enemy.flash=.15;
   sparks.push({x:enemy.x,y:enemy.y,life:.22,r:8});
+}
+function damage(enemy,value){
+  applyHit(enemy,value*player.attack/baseStats.attack);
 }
 function hurt(value){
   player.hp=Math.max(0,player.hp-Math.max(1,Math.round(value*100/(100+player.defense))));
@@ -723,7 +747,7 @@ function useSkills(dt,enemies){
       for(const enemy of targets.slice(0,qi.targets)){
         if(distance(enemy,player)>qiRange)break;
         const angle=Math.atan2(enemy.y-player.y,enemy.x-player.x);
-        qiBolts.push({x:player.x,y:player.y,angle,target:enemy,value:qi.damage,life:1});
+        qiBolts.push({x:player.x,y:player.y,angle,target:enemy,life:1});
       }
       qi.timer=qi.cooldown;
     }
@@ -751,7 +775,7 @@ function useSkills(dt,enemies){
     bolt.life-=dt;
     if(bolt.life<=0||bolt.target.hp<=0)return false;
     const gap=distance(bolt,bolt.target),step=qiSpeed*dt;
-    if(gap<=step+bolt.target.r){damage(bolt.target,bolt.value);return false;}
+    if(gap<=step+bolt.target.r){applyHit(bolt.target,player.attack);return false;}
     const dx=bolt.target.x-bolt.x,dy=bolt.target.y-bolt.y;
     bolt.angle=Math.atan2(dy,dx);
     bolt.x+=dx*step/gap;bolt.y+=dy*step/gap;
@@ -784,7 +808,10 @@ function heal(fraction){
   player.hp=Math.min(player.maxHp,player.hp+player.maxHp*fraction);
 }
 function dropLoot(enemy,value){
-  if(Math.random()<.60||kills<=5||enemy.mini||enemy===boss)stars.push({x:enemy.x,y:enemy.y,value});
+  if(Math.random()<.60||kills<=5||enemy.mini)stars.push({x:enemy.x,y:enemy.y,value});
+  dropItem(enemy);
+}
+function dropItem(enemy){
   const roll=Math.random();
   const kind=roll<.075?'heal':roll<.10?'magnet':roll<.15?'bomb':null;
   if(kind)drops.push({x:enemy.x+20,y:enemy.y,kind});
@@ -1044,8 +1071,11 @@ function update(dt){
   }
   if(boss?.hp<=0){
     kills++;warnings=[];
-    if(towerFloor||nextBoss===bossStages.length){boss=null;floorCleared();return;}
-    dropLoot(boss,regularLevelXP(player.level+1));
+    const rewardXP=boss.xp??0;
+    player.xp+=rewardXP;
+    if(towerFloor||nextBoss===bossStages.length){boss=null;floorCleared(rewardXP);return;}
+    sparks.push({x:boss.x,y:boss.y,value:rewardXP,life:bossXPNoticeTime,kind:'boss-xp'});
+    dropItem(boss);
     boss=null;
   }
   if(towerFloor&&!boss&&floorKills>=towerGoal)spawnTowerGuardian();
@@ -1341,7 +1371,14 @@ function draw(){
     drawHero(ctx,pose,x,y+7+hover,78,attacking?player.attackFacing:player.facing);
   }
   for(const spark of sparks){
-    if(spark.kind==='bomb'){
+    if(spark.kind==='boss-xp'){
+      ctx.save();ctx.globalAlpha=Math.min(1,spark.life*2);
+      ctx.textAlign='center';ctx.textBaseline='bottom';ctx.font='bold 20px system-ui';
+      ctx.lineWidth=4;ctx.strokeStyle='#24323c';ctx.fillStyle='#ffdc88';
+      const y=spark.y-30-(bossXPNoticeTime-spark.life)*26;
+      const label='+'+spark.value+' XP';
+      ctx.strokeText(label,spark.x,y);ctx.fillText(label,spark.x,y);ctx.restore();
+    }else if(spark.kind==='bomb'){
       const fade=spark.life/bombFlashTime;
       ctx.save();ctx.globalAlpha=fade;
       starShape(spark.x,spark.y-6,16+23*(1-fade),'#ffb563');
@@ -1395,8 +1432,8 @@ function drawWaveHud(){
 }
 function drawSkillHud(){
   const qi=player.qi;
-  qiSlot.name.textContent='基礎氣功';
-  qiSlot.status.textContent='Lv.'+qi.level+' · '+qi.timer.toFixed(2)+' 秒';
+  qiSlot.name.textContent='氣功普攻';
+  qiSlot.status.textContent='強化 '+qi.rank+' · '+qi.timer.toFixed(2)+' 秒';
   qiSlot.bar.value=clamp(1-qi.timer/qi.cooldown,0,1);
   const limits=[ringCooldown,wheelCooldown,brickCooldown];
   const cooldowns=[player.ringTimer,player.wheelTimer,player.brickTimer];
