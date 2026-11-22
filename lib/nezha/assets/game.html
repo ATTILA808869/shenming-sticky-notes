@@ -54,6 +54,9 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 .skill progress{display:block;width:100%;height:4px;margin-top:4px}
 #gear,.hint{font-size:12px;color:var(--muted)}
 .hint{flex-wrap:wrap}.hint #score{font-variant-numeric:tabular-nums}
+.xp-summary{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+#spendXP{inline-size:88px;flex-shrink:0;padding:5px 6px;white-space:nowrap}
+#spendXP:disabled{visibility:hidden}
 .ranking{max-height:25dvh;overflow:auto;text-align:left;padding-left:28px}
 .ranking li{padding:4px;overflow-wrap:anywhere}
 .ranking-message{display:block;color:#ffd389;white-space:pre-wrap;font-size:14px}
@@ -106,7 +109,7 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 <div class="skill"><strong></strong><small></small><progress max="1" aria-label="金磚冷卻"></progress></div>
 </section>
 <div id="gear" aria-label="強化道具"></div>
-<footer class="hint"><span class="controls">WASD／方向鍵移動・數字鍵選擇</span><span id="score"></span></footer>
+<footer class="hint"><span class="controls">WASD／方向鍵移動・數字鍵選擇</span><div class="xp-summary"><span id="score"></span><button id="spendXP" type="button" disabled>升級</button></div></footer>
 </main>
 <script>
 const canvas = document.querySelector('canvas');
@@ -183,6 +186,10 @@ const qiMinCooldown=.35;
 const qiMaxTargets=5;
 const towerBaselineFloor=4;
 const towerFloorGrowth=1.15;
+const towerHealthBoost=1.35;
+const towerDamageBoost=1.12;
+const towerLevelXPBoost=1.15;
+const towerMaxLevelCost=1800;
 const baseStats={hp:100,attack:25,defense:25,speed:45};
 const storyMobLimit=80;
 const waveWarningTime=4;
@@ -322,6 +329,7 @@ document.addEventListener('keydown',event=>{
     event.preventDefault(); keys.add(key);
   }
   if(key==='escape'&&!event.repeat)togglePause();
+  if(key==='l'&&!event.repeat&&!event.altKey&&!event.ctrlKey&&!event.metaKey)spendSavedXP();
 });
 document.addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
 window.addEventListener('blur',()=>keys.clear());
@@ -400,15 +408,16 @@ function currentEnemyBalance(){
 const enemyBalance=()=>towerBaseline??currentEnemyBalance();
 const baseTowerFloor=()=>Math.min(towerFloor,towerBaselineFloor);
 const towerStrength=()=>towerFloorGrowth**Math.max(0,towerFloor-towerBaselineFloor);
+const enemyHealthStrength=()=>towerStrength()*(towerFloor?towerHealthBoost:1);
 function scaledEnemyAttack(attack,balance){
-  return attack*balance.durability*towerStrength();
+  return attack*balance.durability*towerStrength()*(towerFloor?towerDamageBoost:1);
 }
 function levelHealthGrowth(rate,balance){
   return 1+rate*(balance.level-1)**1.2;
 }
 function scaledBossHealth(hp,balance){
   const base=Math.max(hp*1.2*balance.attackGrowth**.65,balance.burst*(4+Math.log2(1+baseTowerFloor())*.4));
-  return Math.round(base*levelHealthGrowth(.023,balance)*towerStrength());
+  return Math.round(base*levelHealthGrowth(.023,balance)*enemyHealthStrength());
 }
 function chooseMobKind(){
   const phase=towerFloor>0?480:time;
@@ -427,7 +436,7 @@ function addMob(wave=false,kind=chooseMobKind(),angle=Math.random()*Math.PI*2){
   const midgame=Math.max(0,time-120);
   const endgame=Math.max(0,time-300);
   const hp=Math.round((23+time*.112+midgame*.025+endgame*.055)*(wave?.73:1)*
-    balance.attackGrowth**(wave?.35:.65)*levelHealthGrowth(wave?.030:.042,balance)*towerStrength()*traits.hp);
+    balance.attackGrowth**(wave?.35:.65)*levelHealthGrowth(wave?.030:.042,balance)*enemyHealthStrength()*traits.hp);
   mobs.push({x:clamp(player.x+Math.cos(angle)*radius,15,mapWidth-15),
     y:clamp(player.y+Math.sin(angle)*radius,15,mapHeight-15),
     hp,maxHp:hp,attack:scaledEnemyAttack((8+time*.037+midgame*.008+endgame*.014)*(wave?.48:1)*traits.attack,balance),
@@ -474,7 +483,7 @@ function addMiniBoss(){
   const type=miniTypes[Math.floor(Math.random()*miniTypes.length)];
   const angle=Math.random()*2*Math.PI;
   const growth=balance.miniAttackScaling?balance.attackGrowth**.75:1;
-  const hp=Math.round((type.hp+time*.24)*1.15*levelHealthGrowth(.034,balance)*growth*towerStrength());
+  const hp=Math.round((type.hp+time*.24)*1.15*levelHealthGrowth(.034,balance)*growth*enemyHealthStrength());
   mobs.push({...type,mini:true,hp,maxHp:hp,attack:scaledEnemyAttack(type.attack+time*.022,balance),
     x:clamp(player.x+Math.cos(angle)*185,25,mapWidth-25),
     y:clamp(player.y+Math.sin(angle)*185,25,mapHeight-25),
@@ -486,11 +495,22 @@ function regularLevelXP(targetLevel){
   if(targetLevel>=50)return 599;
   return Math.round(599+(targetLevel-50)*(158/9));
 }
-function needed(){
-  const targetLevel=player.level+1;
-  if(targetLevel===21)return 795;
-  if(targetLevel===41)return 2855;
-  return regularLevelXP(targetLevel);
+function levelCost(targetLevel){
+  const base=targetLevel===21?795:targetLevel===41?2855:regularLevelXP(targetLevel);
+  if(!towerFloor)return base;
+  if(targetLevel>=50)return towerMaxLevelCost;
+  const progress=Math.max(0,targetLevel-41)/9;
+  return Math.round(base*towerLevelXPBoost+(towerMaxLevelCost-599*towerLevelXPBoost)*progress);
+}
+const needed=()=>levelCost(player.level+1);
+function availableLevels(){
+  let level=player.level,remaining=player.xp;
+  for(;level<49;level++){
+    const cost=levelCost(level+1);
+    if(remaining<cost)return level-player.level;
+    remaining-=cost;
+  }
+  return level-player.level+Math.floor(remaining/levelCost(50));
 }
 function timeBasedEnemyXP(seconds){
   const minutes=Math.floor(seconds/60);
@@ -668,12 +688,15 @@ function advanceLevel(){
   nextRewardAt=elapsed+rewardInterval;
   return true;
 }
-function continueBossLevelUps(resume){
+function continueLevelUps(resume){
   while(advanceLevel()){
     // Each choice applies before calculating the next level's stats or available cards.
-    if(showUpgrades(()=>continueBossLevelUps(resume)))return;
+    if(showUpgrades(()=>continueLevelUps(resume)))return;
   }
   resume();
+}
+function spendSavedXP(){
+  if(mode==='play'&&player.xp>=needed())continueLevelUps(()=>setMode('play'));
 }
 async function accountRequest(path,data){
   const response=await fetch('/games/nezha/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
@@ -1291,7 +1314,7 @@ function update(dt){
       if(tomeFound)player.skillTome=true;
       boss=null;
       const finishRewards=()=>continueAfterGearRewards(()=>floorCleared(rewardXP,tomeFound));
-      if(rewardXP)continueBossLevelUps(finishRewards);
+      if(rewardXP)continueLevelUps(finishRewards);
       else finishRewards();
       return;
     }
@@ -1299,14 +1322,14 @@ function update(dt){
     dropItem(boss);
     boss=null;
     if(rewardXP&&player.xp>=needed()){
-      continueBossLevelUps(continueAfterGearRewards);
+      continueLevelUps(continueAfterGearRewards);
       return;
     }
   }
   if(towerFloor&&!boss&&floorKills>=towerGoal)spawnTowerGuardian();
   sparks=sparks.filter(s=>(s.life-=dt)>0);
   if(showGearReward())return;
-  if(elapsed<nextRewardAt||(magnetEffect&&elapsed<magnetEffect.rewardAt))return;
+  if(towerFloor||elapsed<nextRewardAt||(magnetEffect&&elapsed<magnetEffect.rewardAt))return;
   if(advanceLevel())showUpgrades();
 }
 function circle(x,y,r,fill,stroke,line=2){
@@ -1653,6 +1676,9 @@ const waveHud=document.querySelector('#wave');
 const clock=document.querySelector('#clock');
 const level=document.querySelector('#level');
 const score=document.querySelector('#score');
+const spendXPButton=document.querySelector('#spendXP');
+spendXPButton.onclick=spendSavedXP;
+const xpNumber=new Intl.NumberFormat('zh-TW');
 const xp=document.querySelector('#xp');
 const bossbar=document.querySelector('#bossbar');
 const bossname=document.querySelector('#bossname');
@@ -1720,7 +1746,11 @@ function frame(now){
   }
   level.textContent='等級 '+player.level;
   const requiredXP=needed();
-  score.textContent='擊退 '+kills+' · XP '+player.xp+'/'+requiredXP;
+  score.textContent='擊退 '+kills+' · XP '+xpNumber.format(player.xp)+' / '+xpNumber.format(requiredXP);
+  const ready=mode==='play'&&player.xp>=requiredXP?availableLevels():0;
+  spendXPButton.disabled=!ready;
+  const label=ready?'升級 ×'+(ready>99?'99+':ready):'升級';
+  if(spendXPButton.textContent!==label)spendXPButton.textContent=label;
   xp.max=requiredXP;xp.value=player.xp;
   requestAnimationFrame(frame);
 }
