@@ -731,7 +731,7 @@ const skillUpgradeRoutes=[
   ]
 ];
 const jigongSpecs=[
-  {name:'開道鞋',label:'開道鞋・八方貫穿',count:8,step:2,max:20,power:22,gain:6,balancePower:14,balanceGain:4,cooldown:3.2,min:1.15,speed:390,life:1.15,r:12},
+  {name:'開道鞋',label:'開道鞋・八方貫穿',count:8,step:2,max:20,power:22,gain:6,balancePower:14,balanceGain:4,cooldown:3.2,min:1.15,speed:390,life:1.15,r:16},
   {name:'葫蘆寶',label:'葫蘆寶・環射水花',count:4,step:4,max:16,power:24,gain:7,balancePower:18,balanceGain:5,cooldown:4,min:1.35,speed:345,life:1.10,r:11},
   {name:'清新扇',label:'清新扇・迴旋龍捲風',count:3,step:2,max:25,power:21,gain:6,balancePower:15,balanceGain:4,cooldown:5.2,min:1.65,speed:205,life:1.55,r:13}
 ];
@@ -756,7 +756,9 @@ const activeSkillUnlocks=()=>player.character==='jigong'?jigongUnlocks:skillUnlo
 const activeSkillRoutes=()=>player.character==='jigong'?jigongRoutes:skillUpgradeRoutes;
 const jigongReturnPower=.4;
 const jigongSlowTime=1.2,jigongSlowInterval=2;
-const jigongWindRadius=42,jigongWindTime=1.5,jigongWindInterval=.5,jigongWindPower=.25,jigongMaxEyes=3;
+const jigongWaterTime=10,jigongWaterInterval=1,jigongWaterDamage=.03;
+const jigongWindRadius=42,jigongWindRingRadius=124,jigongWindEyes=10,jigongWindTime=6;
+const jigongWindInterval=.5,jigongWindPower=.60,jigongWindPullSpeed=180;
 let jigongShots=[],jigongWindCasts=[];
 const learnedSkillCount=()=>player.skillLevels.filter(Boolean).length;
 const skillSlotLimit=()=>player.skillTome?skillNames.length:normalSkillLimit;
@@ -1296,11 +1298,11 @@ function nearestTargets(enemies){
     .sort((a,b)=>distance(a,player)-distance(b,player));
 }
 function applyHit(enemy,amount){
-  enemy.hp-=Math.round(amount); enemy.flash=.15;
+  enemy.hp-=amount; enemy.flash=.15;
   sparks.push({x:enemy.x,y:enemy.y,life:.22,r:8});
 }
 function damage(enemy,value){
-  applyHit(enemy,value*player.attack/baseStats.attack);
+  applyHit(enemy,Math.round(value*player.attack/baseStats.attack));
 }
 function hurt(value,source){
   if(player.hp<=0)return;
@@ -1330,14 +1332,18 @@ function launchJigongVolley(index,skill){
   const power=spec.power+skill.damageUpgrades*spec.gain;
   const evolved=player.evolved[index];
   const returnHits=index===0&&evolved?new Set():null;
-  const windCast=index===2&&evolved?{eyes:[],power:power*jigongWindPower,pulses:0}:null;
-  const eyeCount=windCast?Math.min(jigongMaxEyes,skill.count):0;
-  const eyeShots=new Set(Array.from({length:eyeCount},(_,i)=>Math.floor(i*skill.count/eyeCount)));
+  if(index===2&&evolved){
+    const eyes=Array.from({length:jigongWindEyes},(_,i)=>{
+      const angle=i*2*Math.PI/jigongWindEyes;
+      return {x:player.x+Math.cos(angle)*jigongWindRingRadius,y:player.y+Math.sin(angle)*jigongWindRingRadius};
+    });
+    jigongWindCasts.push({eyes,power:spec.power*jigongWindPower,startedAt:elapsed,endsAt:elapsed+jigongWindTime,nextPulse:elapsed+jigongWindInterval});
+  }
   for(let i=0;i<skill.count;i++){
     const angle=index===0?(i%8)*Math.PI/4+(i>=16?-Math.PI/16:i>=8?Math.PI/16:0):i*2*Math.PI/skill.count;
     const x=player.x+Math.cos(angle)*18,y=player.y+Math.sin(angle)*18;
     jigongShots.push({index,x,y,originX:player.x,originY:player.y,angle,phase:angle,age:0,life:spec.life,speed:spec.speed,r:spec.r,power,
-      seen:new Set(),hits,evolved,returnHits,returning:false,windCast:eyeShots.has(i)?windCast:null});
+      seen:new Set(),hits,evolved,returnHits,returning:false});
   }
 }
 function jigongSlowFactor(enemy){
@@ -1360,9 +1366,13 @@ function hitJigongSegment(shot,oldX,oldY,enemies){
     // Piercing keeps hitting new targets; overlapping rays are weaker on the same target.
     if(overlap>=3)continue;
     shot.hits.set(enemy,overlap+1);damage(enemy,shot.power*(overlap?.35:1));
-    if(shot.index===1&&shot.evolved&&enemy.hp>0&&elapsed>=(enemy.jigongSlowReadyAt??0)){
-      enemy.jigongSlowUntil=elapsed+jigongSlowTime;
-      enemy.jigongSlowReadyAt=elapsed+jigongSlowInterval;
+    if(shot.index===1&&shot.evolved&&enemy.hp>0){
+      if(elapsed>=(enemy.jigongSlowReadyAt??0)){
+        enemy.jigongSlowUntil=elapsed+jigongSlowTime;
+        enemy.jigongSlowReadyAt=elapsed+jigongSlowInterval;
+      }
+      enemy.jigongWaterUntil=elapsed+jigongWaterTime;
+      enemy.jigongWaterNextTick??=elapsed+jigongWaterInterval;
     }
   }
 }
@@ -1386,22 +1396,44 @@ function advanceJigongShot(shot,dt,enemies){
     shot.life=(18+shot.speed*shot.age)/shot.speed;shot.age=0;
     return dt>step?advanceJigongShot(shot,dt-step,enemies):true;
   }
-  const cast=shot.windCast;
-  if(cast){
-    if(!cast.eyes.length){cast.startedAt=elapsed;cast.nextPulse=elapsed+jigongWindInterval;jigongWindCasts.push(cast);}
-    cast.eyes.push({x:shot.x,y:shot.y});
-  }
   return false;
 }
-function pulseJigongWind(enemies){
-  jigongWindCasts=jigongWindCasts.filter(cast=>{
-    if(elapsed+1e-9<cast.nextPulse)return true;
-    for(const enemy of enemies){
-      if(enemy.hp>0&&cast.eyes.some(eye=>distance(eye,enemy)<=jigongWindRadius+enemy.r))damage(enemy,cast.power);
+function tickJigongWater(enemy){
+  while(enemy.hp>0&&enemy.jigongWaterNextTick<=enemy.jigongWaterUntil+1e-9&&elapsed+1e-9>=enemy.jigongWaterNextTick){
+    applyHit(enemy,enemy.maxHp*jigongWaterDamage);
+    enemy.jigongWaterNextTick+=jigongWaterInterval;
+  }
+  if(elapsed>=enemy.jigongWaterUntil)enemy.jigongWaterNextTick=undefined;
+}
+function advanceJigongWind(dt,enemies){
+  for(const cast of jigongWindCasts){
+    cast.pulseAt=cast.nextPulse<=cast.endsAt+1e-9&&elapsed+1e-9>=cast.nextPulse?cast.nextPulse:Infinity;
+    if(cast.pulseAt!==Infinity)cast.nextPulse+=jigongWindInterval;
+  }
+  for(const enemy of enemies){
+    if(enemy.hp<=0)continue;
+    const range=(jigongWindRadius+enemy.r)**2;
+    let nearest=null,nearestSq=range,pulseAt=Infinity,power=0;
+    for(const cast of jigongWindCasts){
+      const pulling=elapsed<cast.endsAt;
+      const pulsing=cast.pulseAt<pulseAt&&cast.pulseAt+1e-9>=(enemy.jigongWindReadyAt??0);
+      if(!pulling&&!pulsing)continue;
+      for(const eye of cast.eyes){
+        const gap=(eye.x-enemy.x)**2+(eye.y-enemy.y)**2;
+        if(gap>range)continue;
+        if(pulling&&gap<nearestSq){nearest=eye;nearestSq=gap;}
+        if(pulsing){pulseAt=cast.pulseAt;power=cast.power;}
+      }
     }
-    cast.nextPulse+=jigongWindInterval;
-    return ++cast.pulses<jigongWindTime/jigongWindInterval;
-  });
+    // Overlapping eyes and overlapping casts share one hit interval per enemy.
+    if(power>0){damage(enemy,power);enemy.jigongWindReadyAt=pulseAt+jigongWindInterval;}
+    if(!nearest||nearestSq===0||enemy.hp<=0||enemy.stun>0)continue;
+    const gap=Math.sqrt(nearestSq),resistance=(enemy===boss||enemy.mini) ? .25 : 1;
+    const portion=Math.min(1,Math.max(jigongWindPullSpeed,enemy.speed*1.2)*resistance*dt/gap);
+    enemy.x=clamp(enemy.x+(nearest.x-enemy.x)*portion,15,mapWidth-15);
+    enemy.y=clamp(enemy.y+(nearest.y-enemy.y)*portion,15,mapHeight-15);
+  }
+  jigongWindCasts=jigongWindCasts.filter(cast=>elapsed<cast.endsAt||cast.nextPulse<=cast.endsAt+1e-9);
 }
 function useJigongSkills(dt,target,enemies){
   player.jigong.forEach((skill,index)=>{
@@ -1412,7 +1444,7 @@ function useJigongSkills(dt,target,enemies){
     poseForAttack(target);skill.castAt=elapsed+.10;skill.timer=skill.cooldown;
   });
   jigongShots=jigongShots.filter(shot=>advanceJigongShot(shot,dt,enemies));
-  if(jigongWindCasts.length)pulseJigongWind(enemies);
+  for(const enemy of enemies)if(enemy.jigongWaterNextTick!==undefined)tickJigongWater(enemy);
 }
 function useSkills(dt,enemies){
   const qi=player.qi;
@@ -1459,7 +1491,7 @@ function useSkills(dt,enemies){
     if(bolt.life<=0||bolt.target.hp<=0)return false;
     const gap=distance(bolt,bolt.target),step=bolt.speed*dt;
     if(gap<=step+bolt.target.r){
-      if(bolt.basePower===null)applyHit(bolt.target,player.attack);
+      if(bolt.basePower===null)applyHit(bolt.target,Math.round(player.attack));
       else damage(bolt.target,bolt.basePower);
       return false;
     }
@@ -1784,6 +1816,7 @@ function update(dt){
       if(Math.abs(mx)>.08)enemy.facing=Math.sign(mx);
     }
   }
+  if(jigongWindCasts.length)advanceJigongWind(dt,enemies);
   separateEnemies(enemies);
   // Contact must match the settled positions that the player sees after knockback and separation.
   for(const enemy of enemies){
@@ -2025,6 +2058,11 @@ function ghost(enemy){
     pixel(ctx,'#5bc9df',Math.round(enemy.x-enemy.r),Math.round(enemy.y)+7,9,3);
     pixel(ctx,'#bbf6ff',Math.round(enemy.x+enemy.r)-8,Math.round(enemy.y)+9,6,3);
   }
+  if(elapsed<(enemy.jigongWaterUntil??0)){
+    const drop=Math.floor(elapsed*13+(enemy.phase??0))%8;
+    pixel(ctx,'#75cfee',Math.round(enemy.x-enemy.r/2),Math.round(y)+drop,3,5);
+    pixel(ctx,'#b5effc',Math.round(enemy.x+enemy.r/2),Math.round(y)+7-drop,3,4);
+  }
   if(casting){
     pixel(ctx,'#f18b54',enemy.x-4,y-enemy.r-14,8,8);
     pixel(ctx,'#ffe69a',enemy.x-2,y-enemy.r-16,4,12);
@@ -2166,11 +2204,14 @@ function drawJigongWindEyes(){
   for(const cast of jigongWindCasts)for(const eye of cast.eyes){
     const {x,y}=eye;
     if(x<view.x-r||x>view.x+view.width+r||y<view.y-r||y>view.y+view.height+r)continue;
-    const angle=(elapsed-cast.startedAt)*4;
-    circle(x,y,r,'#31676360','#88d8c3',2);
-    circle(x,y,10,null,'#c3fcdf99',2);
-    pixel(ctx,'#d2ffe8',Math.round(x+Math.cos(angle)*26)-3,Math.round(y+Math.sin(angle)*26)-2,6,4);
-    pixel(ctx,'#a5e7ca',Math.round(x-Math.cos(angle)*26)-3,Math.round(y-Math.sin(angle)*26)-2,6,4);
+    const age=elapsed-cast.startedAt;
+    circle(x,y,r,'#31676348','#88d8c399',2);
+    for(let arm=0;arm<2;arm++)for(let i=0;i<8;i++){
+      const angle=age*6+arm*Math.PI-i*.36;
+      const reach=6+(i*4-age*26%4);
+      const size=i<3?4:6;
+      pixel(ctx,i<3?'#d2ffe8':'#82d4be',Math.round(x+Math.cos(angle)*reach)-size/2,Math.round(y+Math.sin(angle)*reach)-2,size,4);
+    }
   }
 }
 function drawPlayerHealth(){
@@ -2353,6 +2394,11 @@ function setProgress(element,value,max=1){
   if(element.value!==next||!element.hasAttribute('value'))element.value=next;
 }
 const updateHistory=[
+  {date:'2026-11-23',title:'濟公禪師進化法寶再強化',changes:[
+    ['開道鞋・八方神行鞋','拖鞋外觀與命中半徑調整為原版的 2 倍，進化後的來回飛行皆適用。'],
+    ['伏魔回風扇','施放時在濟公周圍留下 10 個環形颶風眼，會吸引附近敵人，對大小魔王的拉力較弱。風眼持續 6 秒，每 0.5 秒造成清新扇基礎傷害的 60%；重疊不疊傷。'],
+    ['甘露乾坤葫','水花保留原有減速，並讓目標持續 10 秒、每秒損失 3% 最大血量。再次命中會刷新持續時間，傷害不疊加。']
+  ]},
   {date:'2026-11-23',title:'濟公禪師法寶傷害調整',changes:[
     ['開道鞋・八方神行鞋','基礎傷害由 14 提高至 22，每次傷害強化由＋4 提高至＋6。拖鞋外觀與命中半徑放大 50%，折返傷害仍為強化後傷害的 40%。'],
     ['葫蘆寶・甘露乾坤葫','基礎傷害由 18 提高至 24，每次傷害強化由＋5 提高至＋7。減速效果與間隔不變。'],
