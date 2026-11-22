@@ -3,6 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>神明Q仙傳｜神明便利貼</title>
+<link rel="preload" as="image" href="/games/nezha/nezha-sheet.png" fetchpriority="high">
 <style>
 :root{color-scheme:dark;--night:#101d25;--panel:#1c3038;--line:#526668;--ink:#fff3dc;--muted:#ced6c9;--gold:#ffcf77;--red:#d96c52;--mint:#8ad4b5}
 *{box-sizing:border-box}
@@ -37,6 +38,7 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 .card h1{font-size:29px;line-height:1.15;margin:4px 0 10px;color:var(--gold)}
 .card p{line-height:1.5;margin:7px 0 12px;font-size:14px;color:#e3e7d8}
 .card .portrait{width:96px;height:96px;margin:auto}
+.card .portrait:not([data-loaded]){visibility:hidden}
 .actions{display:grid;gap:7px}.actions button{width:100%;text-align:left;padding:7px 10px}
 .skills{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .skill{min-width:0;background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--red);padding:6px 8px}
@@ -100,6 +102,8 @@ const overlay = document.querySelector('#overlay');
 const card = document.querySelector('#card');
 const pause = document.querySelector('#pause');
 const heroSheet = new Image();
+const heroSheetUrl = '/games/nezha/nezha-sheet.png';
+let heroSheetFailed = false;
 const heroCellSize = 724;
 // Each body stays centered on the same point, including the wider attack pose.
 const heroPoses = {
@@ -108,10 +112,16 @@ const heroPoses = {
   attack:{column:2,anchorX:387,anchorY:663}
 };
 heroSheet.addEventListener('load',()=>{
-  const portrait=card.querySelector('.portrait');
-  if(portrait)drawHeroPortrait(portrait);
+  if(mode==='ready')showStart();
+  else {
+    const portrait=card.querySelector('.portrait');
+    if(portrait)drawHeroPortrait(portrait);
+  }
 });
-heroSheet.src='/games/nezha/nezha-sheet.png';
+heroSheet.addEventListener('error',()=>{
+  heroSheetFailed=true;
+  if(mode==='ready')showStart();
+});
 const keys = new Set();
 const rounds = 480;
 const contactHitInterval = 0.5;
@@ -239,9 +249,16 @@ function panel(title,desc,choices,portrait=false){
   if(mode!=='ready') actions.querySelector('button:enabled')?.focus({preventScroll:true});
 }
 function start(){reset();setMode('play');}
+function retryHeroSheet(){
+  heroSheetFailed=false;
+  heroSheet.src=heroSheetUrl+'?retry='+Date.now();
+  showStart();
+}
 function showStart(){
   setMode('ready');
-  panel('神明Q仙傳','探索廟埕、擊退小幽靈，在第 2、5、8 分鐘迎戰魔王。擊倒超級龍王後，帶著法寶進入無限塔。',[['開始守廟埕',start],['無限塔排行榜',()=>showLeaderboard(showStart)]],true);
+  const play=heroSheetFailed?['重試載入角色',retryHeroSheet]:heroSheet.naturalWidth?['開始守廟埕',start]:['角色載入中…',null];
+  const description=heroSheetFailed?'三太子圖片載入失敗，請重試。':'探索廟埕、擊退小幽靈，在第 2、5、8 分鐘迎戰魔王。擊倒超級龍王後，帶著法寶進入無限塔。';
+  panel('神明Q仙傳',description,[play,['無限塔排行榜',()=>showLeaderboard(showStart)]],true);
 }
 function togglePause(){
   if(mode==='play'){
@@ -1059,22 +1076,6 @@ function pixel(target,color,x,y,w,h){
   target.fillStyle=color;
   target.fillRect(x,y,w,h);
 }
-function paintHero(target,frame,moving){
-  const p=(color,x,y,w,h)=>pixel(target,color,x,y,w,h);
-  const ink='#1d232d',red='#b34148',verm='#e96552',gold='#f6ba58',light='#ffe38f',skin='#f4c398';
-  const bob=moving&&frame%2?1:0;
-  target.save();target.translate(0,bob);
-  p(ink,9,0,6,3);p(ink,7,3,10,2);p(ink,5,5,14,9);p(ink,7,14,10,2);
-  p(gold,10,1,4,2);p(red,8,3,8,2);p(gold,6,5,12,2);p(light,10,5,4,2);
-  p(skin,7,7,10,6);p(skin,9,13,6,2);p('#d38a72',7,11,2,2);p('#d38a72',15,11,2,2);
-  p(ink,9,9,1,2);p(ink,14,9,1,2);p(verm,11,8,2,1);p(red,11,13,2,1);
-  p(ink,6,15,12,8);p(red,7,16,10,6);p(verm,8,16,8,2);p(gold,10,16,4,6);p(light,10,17,4,1);
-  const step=moving?[-1,0,1,0][frame]:0;
-  p(ink,6,22+step,5,3);p(ink,13,22-step,5,3);p(gold,7,22+step,3,1);p(gold,14,22-step,3,1);
-  p(red,2,14+(frame%2),5,2);p(verm,1,16+(frame%2),4,2);p(red,17,13,5,2);p(verm,20,11+(frame%2),3,2);
-  p(ink,20,7,2,13);p(gold,20,8,1,11);p(light,20,5,2,3);p(verm,19,7,4,1);
-  target.restore();
-}
 function drawHero(target,pose,x,y,size,facing){
   const {column,anchorX,anchorY}=heroPoses[pose];
   target.save();
@@ -1086,14 +1087,11 @@ function drawHero(target,pose,x,y,size,facing){
   target.restore();
 }
 function drawHeroPortrait(canvas){
+  if(!heroSheet.naturalWidth)return;
   const target=canvas.getContext('2d');
   target.clearRect(0,0,canvas.width,canvas.height);
-  if(heroSheet.naturalWidth){
-    drawHero(target,'idle',canvas.width/2,canvas.height-7,canvas.width*.95,-1);
-  }else{
-    target.save();target.translate(12,3);target.scale(3,3);
-    paintHero(target,0,false);target.restore();
-  }
+  drawHero(target,'idle',canvas.width/2,canvas.height-7,canvas.width*.95,-1);
+  canvas.dataset.loaded='';
 }
 const sprites=new Map();
 function sprite(key,w,h,paint){
@@ -1337,10 +1335,6 @@ function draw(){
     const pose=attacking?'attack':flying?'fly':'idle';
     const hover=attacking?0:Math.round(Math.sin(elapsed*(flying?15:5))*(flying?3:1));
     drawHero(ctx,pose,x,y+7+hover,78,attacking?player.attackFacing:player.facing);
-  }else{
-    const frame=Math.floor(elapsed*(flying?12:3))%4;
-    const actor=sprite('hero:'+flying+':'+frame,24,28,layer=>paintHero(layer,frame,flying));
-    drawActorSprite(actor,x,y+7,2.5,player.facing<0);
   }
   for(const spark of sparks){
     if(spark.kind==='bomb'){
@@ -1438,6 +1432,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 resize();reset();showStart();
+heroSheet.src=heroSheetUrl;
 accountRequest('session').then(({nickname})=>{
   if(!nickname){location.replace('/games/nezha');return;}
   const nicknameLabel=document.querySelector('#nickname');
