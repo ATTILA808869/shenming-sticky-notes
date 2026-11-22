@@ -7,7 +7,7 @@ const historyStart = () => new Date(Date.now() - historyWindowMs);
 
 export async function getLobbyMessages() {
   const messages = await prisma.nezhaChatMessage.findMany({
-    where: { createdAt: { gte: historyStart() } },
+    where: { createdAt: { gte: historyStart() }, hiddenAt: null },
     orderBy: { id: "desc" },
     take: historyLimit,
     select: { id: true, body: true, createdAt: true, account: { select: { nickname: true } } }

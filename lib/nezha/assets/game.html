@@ -23,7 +23,7 @@ button:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid wh
 .field{position:relative;overflow:hidden;flex:1;min-height:0;border:2px solid #b78d59;border-radius:4px;background:#34454a;box-shadow:0 0 0 2px #0a151d}
 canvas{width:100%;height:100%;display:block;touch-action:none;image-rendering:pixelated}
 #arena{position:absolute;inset:0}
-#player-sprite{position:absolute;left:0;top:0;width:128px;height:128px;pointer-events:none}
+#player-sprite{position:absolute;left:0;top:0;width:148px;height:148px;pointer-events:none}
 .hud{pointer-events:none;position:absolute;top:12px;inset-inline:12px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:start;gap:5px;font-weight:800}
 .hud span,.stats,.bossbar,.wave{background:#17252ff2;border:1px solid #9d8062;border-radius:2px}
 .hud span{padding:6px 10px;font-size:14px;white-space:nowrap}.hud #level{justify-self:end}
@@ -84,6 +84,17 @@ html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
 .lobby-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:7px 0 0}
 .lobby-stats div{min-width:0;padding:7px 4px;border-top:1px solid var(--line);background:#152931;text-align:center}
 .lobby-stats dt{font-size:12px;color:var(--muted)}.lobby-stats dd{margin:4px 0 0;font-weight:800;font-variant-numeric:tabular-nums}
+.character-roster{display:grid;gap:4px;margin-top:8px}.character-choice{border-top:1px solid var(--line)}
+.character-choice button{margin-top:7px;font-size:14px}.character-choice .character-art{position:relative}
+.character-choice .portrait{width:80px;height:80px}.character-feedback:empty{display:none}
+.character-art.is-locked .portrait{filter:brightness(0) opacity(.6)}
+.character-art.is-locked::after{content:'?';position:absolute;inset:0;display:grid;place-items:center;color:var(--gold);font-size:31px;font-weight:800}
+.update-log{width:min(530px,calc(100% - 26px));max-height:85vh;max-height:85svh;overflow:auto;color:var(--ink);background:#21343b;border:2px solid #e5ab65;border-radius:4px;padding:0 16px 16px;text-align:left}
+.update-log::backdrop{background:#0e1925bb}.update-log header{position:sticky;top:0;z-index:1;background:#21343b;padding:12px 0;border-bottom:1px solid var(--line)}
+.update-log h2{font-size:21px;margin:0;color:var(--gold)}.update-log h3{font-size:16px;margin:14px 0 4px}.update-log time{color:var(--muted);font-size:13px}
+.update-log ul{padding-left:21px;margin:8px 0;font-size:14px;line-height:1.55}.update-log li+li{margin-top:6px}
+.unlock-toast{position:absolute;z-index:1;top:18%;left:50%;transform:translateX(-50%);max-width:90%;padding:7px 12px;background:#17252f;color:var(--gold);border:1px solid var(--gold);text-align:center;pointer-events:none;font-size:14px;font-weight:800}
+html.lobby .unlock-toast{display:none}
 .lobby-view.lobby-chat-view,.lobby-room{display:flex;flex-direction:column}
 .lobby-room{flex:1;min-height:0;gap:8px}
 .lobby-log{flex:1;min-height:48px;overflow:auto;overscroll-behavior:contain;margin:0;padding:0 12px;list-style:none;background:#152931;border:1px solid var(--line);border-radius:4px}
@@ -123,16 +134,17 @@ html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
 }
 </style>
 <main>
-<header><div><a href="/" style="color:inherit"><small>神明便利貼</small></a><strong>神明Q仙傳</strong></div><div class="account"><span id="nickname"></span><button id="logout">登出</button><button id="pause" disabled>暫停</button></div></header>
+<header><div><a href="/" style="color:inherit"><small>神明便利貼</small></a><strong>神明Q仙傳</strong></div><div class="account"><span id="nickname"></span><button id="updates" type="button" aria-haspopup="dialog">更新日誌</button><button id="logout">登出</button><button id="pause" disabled>暫停</button></div></header>
 <div class="field">
 <canvas id="arena" aria-label="廟埕遊戲區"></canvas>
 <canvas id="player-sprite" aria-hidden="true"></canvas>
-<div class="hud"><dl class="stats" aria-label="三太子狀態">
+<div class="hud"><dl class="stats" aria-label="玩家角色狀態">
 <dt>血量</dt><dd id="health"></dd><dt>攻擊力</dt><dd id="attack"></dd>
 <dt>防禦力</dt><dd id="defense"></dd><dt>移動速度</dt><dd id="moveSpeed"></dd></dl><span id="clock"></span><span id="level"></span></div>
 <div id="wave" class="wave" hidden></div>
 <div class="bossbar" id="bossbar" hidden><span id="bossname"></span><progress id="bossHP" aria-label="魔王血量"></progress></div>
 <progress id="xp" aria-label="升級進度"></progress>
+<div id="unlock-toast" class="unlock-toast" role="status" hidden>濟公禪師已解鎖！</div>
 <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
 </div>
 <section class="skills" aria-label="氣功、法寶與冷卻時間">
@@ -144,17 +156,26 @@ html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
 <div id="gear" aria-label="強化道具"></div>
 <footer class="hint"><span class="controls">WASD／方向鍵移動・數字鍵選擇</span><div class="xp-summary"><span id="score"></span><button id="spendXP" type="button" disabled>升級</button></div></footer>
 </main>
+<dialog id="update-log" class="update-log" aria-labelledby="update-title">
+  <header><h2 id="update-title">更新日誌</h2><form method="dialog"><button type="submit">關閉</button></form></header>
+  <div id="update-entries"></div>
+</dialog>
 <script>
 const canvas = document.querySelector('#arena');
 const ctx = canvas.getContext('2d');
 const playerSprite=document.querySelector('#player-sprite');
 const spriteCtx=playerSprite.getContext('2d');
+const unlockToast=document.querySelector('#unlock-toast');
+const updateDialog=document.querySelector('#update-log');
 const overlay = document.querySelector('#overlay');
 const card = document.querySelector('#card');
 const pause = document.querySelector('#pause');
 const heroSheet = new Image();
 const heroSheetUrl = '/games/nezha/nezha-sheet.png';
 let heroSheetFailed = false;
+const jigongSheet=new Image();
+const jigongSheetUrl='/games/nezha/jigong-attack-sheet.png';
+let jigongSheetFailed=false;
 const heroCellSize = 724;
 const heroWorldSize=78;
 let spriteDensity=0,spriteRasterKey='',spriteLeft,spriteTop;
@@ -164,17 +185,20 @@ const heroPoses = {
   fly:{column:1,anchorX:313,anchorY:659},
   attack:{column:2,anchorX:387,anchorY:663}
 };
-heroSheet.addEventListener('load',()=>{
+const characterNames={nezha:'三太子',jigong:'濟公禪師'};
+const jigongFrame={anchorX:485,anchorY:675};
+const characterSheet=id=>id==='jigong'?jigongSheet:heroSheet;
+function loadJigongSheet(){if(!jigongSheet.getAttribute('src'))jigongSheet.src=jigongSheetUrl;}
+for(const asset of [heroSheet,jigongSheet])asset.addEventListener('load',()=>{
   spriteRasterKey='';
-  const portrait=card.querySelector('.portrait');
-  if(portrait)drawHeroPortrait(portrait);
-  refreshLobbyPlay();
-  requestFrame();
+  for(const portrait of card.querySelectorAll('.portrait'))drawHeroPortrait(portrait);
+  refreshLobbyPlay();requestFrame();
 });
 heroSheet.addEventListener('error',()=>{
   heroSheetFailed=true;
   refreshLobbyPlay();
 });
+jigongSheet.addEventListener('error',()=>{jigongSheetFailed=true;refreshLobbyPlay();});
 const keys = new Set();
 const rounds = 480;
 const lateStoryXPStart = 300;
@@ -272,6 +296,9 @@ let width, height, player, mobs, stars, sparks, time, spawn, kills, mode;
 let stick=null,pinch=null;
 let closeLobby = null;
 let runInProgress=false,lobbyDraft='';
+let profile={character:'nezha',jigongUnlocked:false},unlockRun=null,towerEntryPending=false,unlockRequest=null;
+let unlockToastUntil=0;
+let characterRefresh=null,selectingCharacter=false;
 const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
 const unit = (x,y) => {const length = Math.hypot(x,y) || 1; return [x/length,y/length];};
@@ -304,16 +331,18 @@ function trackCamera(){
   centerCamera(camera,width,height);
 }
 function reset(){
-  player = {x:mapWidth/2,y:mapHeight/2,hp:baseStats.hp,maxHp:baseStats.hp,defense:baseStats.defense,attack:baseStats.attack,speed:baseStats.speed,
+  player = {character:profile.character,x:mapWidth/2,y:mapHeight/2,hp:baseStats.hp,maxHp:baseStats.hp,defense:baseStats.defense,attack:baseStats.attack,speed:baseStats.speed,
     qi:{...baseQi,rank:1,timer:0},
     xp:0,level:1,rings:0,ringDamage:baseStats.attack,pattern:0,wheels:0,wheelDamage:15,
     wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
     skillLevels:[0,0,0], skillRoutes:[null,null,null], skillTome:false, evolved:[false,false,false], gear:[0,0,0,0],
     deathCause:null,
-    moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1};
+    moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1,attackAt:-1,
+    jigong:jigongSpecs.map(spec=>({count:spec.count,power:spec.power,cooldown:spec.cooldown,timer:0,castAt:null}))};
   mobs=[]; stars=[]; sparks=[]; targetedBolts=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
   enemyShots=[];nextEnemyAimAt=0;
   magnetEffect=null;
+  jigongShots=[];unlockToastUntil=0;
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
   towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
   towerBaseline=null;
@@ -331,12 +360,14 @@ function setMode(next){
   previous=null;
   requestFrame();
 }
-function createHeroPortrait(){
+function createHeroPortrait(character=player.character){
   const preview=document.createElement('canvas');
   preview.className='portrait';
   preview.width=96;preview.height=96;
   preview.setAttribute('role','img');
-  preview.setAttribute('aria-label','像素三太子');
+  preview.dataset.character=character;
+  preview.setAttribute('aria-label',characterNames[character]);
+  if(character==='jigong')loadJigongSheet();
   drawHeroPortrait(preview);
   return preview;
 }
@@ -358,7 +389,12 @@ function panel(title,desc,choices,portrait=false){
   actions.querySelector('button:enabled')?.focus({preventScroll:true});
   return actions;
 }
-function start(){reset();runInProgress=true;setMode('play');}
+function start(){
+  if(!characterSheet(profile.character).naturalWidth){showLobby();return;}
+  reset();runInProgress=true;setMode('play');
+  unlockRun=profile.jigongUnlocked?null:accountRequest('run/start',{}).then(({runId})=>runId).catch(()=>null);
+  towerEntryPending=false;
+}
 function togglePause(){
   if(mode==='play'){
     setMode('paused');
@@ -370,6 +406,7 @@ function togglePause(){
 }
 pause.onclick=togglePause;
 document.addEventListener('keydown',event=>{
+  if(updateDialog.open)return;
   if(event.target instanceof HTMLTextAreaElement||event.target instanceof HTMLInputElement)return;
   const key=event.key.toLowerCase();
   if(mode!=='play'&&/^[1-8]$/.test(key)&&!event.altKey&&!event.ctrlKey&&!event.metaKey){
@@ -477,6 +514,7 @@ function wheelSweepsEnemy(enemy,start,sweep,hitRadius){
 }
 const challengeTime=()=>time+towerTime;
 function skillAttackGrowth(){
+  if(player.character==='jigong')return Math.max(1,...player.jigong.map((skill,index)=>player.skillLevels[index]?skill.power/jigongSpecs[index].power:1));
   let skillGrowth=1;
   if(player.rings)skillGrowth=Math.max(skillGrowth,player.ringDamage/baseStats.attack*(player.evolved[0]?1.5:1));
   if(player.wheels)skillGrowth=Math.max(skillGrowth,player.wheelDamage/15);
@@ -492,12 +530,14 @@ function currentEnemyBalance(){
   const ringVolley=player.rings*player.ringDamage*(player.evolved[0]?1.5:1);
   const wheelSweep=player.wheels*player.wheelDamage;
   const brickVolley=player.bricks*player.brickDamage;
+  const jigongVolley=player.character==='jigong'
+    ?player.jigong.reduce((total,skill,index)=>total+(player.skillLevels[index]?Math.min(3,skill.count)*skill.power:0),0):0;
   return {
     time:challengeTime(),
     attackGrowth:referenceAttack/baseStats.attack*skillAttackGrowth(),
     durability:Math.pow(durability,.65),
     level:Math.min(player.level,50),
-    burst:(ringVolley+wheelSweep+brickVolley)*referenceAttack/baseStats.attack,
+    burst:(ringVolley+wheelSweep+brickVolley+jigongVolley)*referenceAttack/baseStats.attack,
     miniAttackScaling:miniBossThreshold>50
   };
 }
@@ -641,7 +681,7 @@ const ingotShotInterval=1;
 const ingotShotDamage=.45;
 const ingotShotSpeed=560;
 function applyEvolutions(){
-  player.evolved=player.skillLevels.map((level,index)=>level>=10&&player.gear[evolutionGear[index]]>0);
+  player.evolved=player.skillLevels.map((level,index)=>player.character!=='jigong'&&level>=10&&player.gear[evolutionGear[index]]>0);
 }
 const skillUnlocks=[
   ['乾坤圈・選擇發射型態',pattern=>{player.rings=1;player.pattern=pattern;}],
@@ -663,20 +703,39 @@ const skillUpgradeRoutes=[
     {key:'damage',label:'傷害＋8',apply:()=>player.brickDamage+=8}
   ]
 ];
+const jigongSpecs=[
+  {name:'開道鞋',label:'開道鞋・八方貫穿',count:8,step:2,max:20,power:14,gain:4,cooldown:3.2,min:1.15,speed:390,life:1.15,r:8},
+  {name:'葫蘆寶',label:'葫蘆寶・環射水花',count:4,step:4,max:16,power:18,gain:5,cooldown:4,min:1.35,speed:345,life:1.10,r:11},
+  {name:'清新扇',label:'清新扇・迴旋龍捲風',count:3,step:2,max:25,power:15,gain:4,cooldown:5.2,min:1.65,speed:205,life:1.55,r:13}
+];
+const jigongUnlocks=jigongSpecs.map(spec=>[spec.label,()=>{}]);
+const jigongNames=jigongSpecs.map(spec=>spec.name);
+const jigongRoutes=jigongSpecs.map((spec,index)=>{
+  const state=()=>player.jigong[index];
+  return [
+    {key:'damage',label:'傷害＋'+spec.gain,apply:()=>state().power+=spec.gain},
+    {key:'count',label:(index===1?'發射方位':'數量')+'＋'+spec.step,available:()=>state().count<spec.max,apply:()=>state().count=Math.min(spec.max,state().count+spec.step)},
+    {key:'cooldown',label:'冷卻時間－10%',available:()=>state().cooldown>spec.min,apply:()=>state().cooldown=Math.max(spec.min,Math.round(state().cooldown*.9*100)/100)}
+  ];
+});
+const activeSkillNames=()=>player.character==='jigong'?jigongNames:skillNames;
+const activeSkillUnlocks=()=>player.character==='jigong'?jigongUnlocks:skillUnlocks;
+const activeSkillRoutes=()=>player.character==='jigong'?jigongRoutes:skillUpgradeRoutes;
+let jigongShots=[];
 const learnedSkillCount=()=>player.skillLevels.filter(Boolean).length;
 const skillSlotLimit=()=>player.skillTome?skillNames.length:normalSkillLimit;
 const hasFreeSkillSlot=()=>learnedSkillCount()<skillSlotLimit();
 function chooseSkill(index,resume=()=>setMode('play')){
   if(player.skillLevels[index]||!hasFreeSkillSlot())return;
   function chooseRoute(pattern){
-    panel(skillNames[index]+'強化路線','選定的強化選項，出現機率提高 30%。',skillUpgradeRoutes[index].map(({key,label})=>[label,()=>{
-      skillUnlocks[index][1](pattern);
+    panel(activeSkillNames()[index]+'強化路線','選定的強化選項，出現機率提高 30%。',activeSkillRoutes()[index].map(({key,label})=>[label,()=>{
+      activeSkillUnlocks()[index][1](pattern);
       player.skillLevels[index]=1;
       player.skillRoutes[index]=key;
       resume();
     }]));
   }
-  if(index===0){
+  if(index===0&&player.character!=='jigong'){
     panel('選擇乾坤圈型態','選定後，本局會沿用這個發射型態。',patterns.map((name,i)=>[name,()=>chooseRoute(i)]));
   }else chooseRoute();
 }
@@ -720,26 +779,26 @@ function showGearReward(resume=()=>setMode('play')){
   gearRewards--;
   nextRewardAt=elapsed+rewardInterval;
   setMode('upgrade');
-  panel('小魔王戰利品','選一件道具強化三太子。',upgrades);
+  panel('小魔王戰利品','選一件道具強化'+characterNames[player.character]+'。',upgrades);
   return true;
 }
 function showUpgrades(resume=()=>setMode('play')){
   const options=gearUpgradeChoices(resume);
   const openSlot=hasFreeSkillSlot();
-  skillUnlocks.forEach(([label],index)=>{
+  activeSkillUnlocks().forEach(([label],index)=>{
     const level=player.skillLevels[index];
     if(!level){
       if(openSlot)options.push([label,()=>chooseSkill(index,resume)]);
       return;
     }
-    const name=player.evolved[index]?evolvedNames[index]:skillNames[index];
+    const name=player.evolved[index]?evolvedNames[index]:activeSkillNames()[index];
     if(level>=maxUpgradeLevel){
       options.push([name+'・已達上限',null]);
       return;
     }
-    const requirement=level===9&&!player.gear[evolutionGear[index]]?'・進化需'+gearNames[evolutionGear[index]]:'';
+    const requirement=player.character!=='jigong'&&level===9&&!player.gear[evolutionGear[index]]?'・進化需'+gearNames[evolutionGear[index]]:'';
     const routes=[];
-    skillUpgradeRoutes[index].forEach(route=>{
+    activeSkillRoutes()[index].forEach(route=>{
       if(route.available&&!route.available())return;
       routes.push([name+' Lv.'+(level+1)+'・'+route.label+requirement,()=>{
         route.apply();player.skillLevels[index]++;applyEvolutions();resume();
@@ -811,8 +870,40 @@ const lobbyViews=[
 function refreshLobbyPlay(){
   const button=card.querySelector('#lobby-play');
   if(!button)return;
-  button.disabled=!runInProgress&&!heroSheetFailed&&!heroSheet.naturalWidth;
-  button.textContent=runInProgress?'繼續遊戲':heroSheetFailed?'重試載入角色':button.disabled?'角色載入中…':'開始守廟埕';
+  const failed=profile.character==='jigong'?jigongSheetFailed:heroSheetFailed;
+  button.disabled=!runInProgress&&(selectingCharacter||!failed&&!characterSheet(profile.character).naturalWidth);
+  button.textContent=runInProgress?'繼續遊戲':selectingCharacter?'套用角色中…':failed?'重試載入角色':button.disabled?'角色載入中…':'開始守廟埕';
+}
+function retryCharacterImage(character){
+  if(character==='jigong'){jigongSheetFailed=false;jigongSheet.src=jigongSheetUrl+'?retry='+Date.now();}
+  else{heroSheetFailed=false;heroSheet.src=heroSheetUrl+'?retry='+Date.now();}
+  refreshLobbyPlay();
+}
+function updateGameProfile(next){
+  profile=next;
+  if(profile.character==='jigong')loadJigongSheet();
+  refreshLobbyPlay();characterRefresh?.();
+}
+async function saveTowerUnlock(){
+  if(profile.jigongUnlocked||!towerEntryPending||unlockRequest)return;
+  const current=unlockRun;
+  unlockRequest=(async()=>{
+    try{
+      const runId=await current;
+      if(!runId)throw new Error('本局的解鎖紀錄沒有成功建立。');
+      const next=await accountRequest('run/enter-tower',{runId});
+      updateGameProfile(next);
+      towerEntryPending=false;
+      unlockToastUntil=elapsed+6;
+      requestFrame();
+    }catch{
+      if(unlockRun===current)towerEntryPending=true;
+    }
+  })();
+  characterRefresh?.();
+  await unlockRequest;
+  unlockRequest=null;
+  characterRefresh?.();
 }
 function showLobby(){
   closeLobby?.();
@@ -826,11 +917,8 @@ function showLobby(){
   const play=document.createElement('button');play.id='lobby-play';play.type='button';
   play.onclick=()=>{
     if(runInProgress)setMode('play');
-    else if(heroSheetFailed){
-      heroSheetFailed=false;
-      heroSheet.src=heroSheetUrl+'?retry='+Date.now();
-      refreshLobbyPlay();
-    }else if(heroSheet.naturalWidth)start();
+    else if(profile.character==='jigong'?jigongSheetFailed:heroSheetFailed)retryCharacterImage(profile.character);
+    else if(characterSheet(profile.character).naturalWidth)start();
   };
   actions.append(play);
   refreshLobbyPlay();
@@ -865,21 +953,59 @@ function mountLobbyHome(container){
   const status=document.createElement('p');status.className='run-status';
   status.textContent=runInProgress?'本局暫停中':'尚未開始';
   const detail=document.createElement('p');
-  detail.textContent=runInProgress?'等級 '+player.level+' · '+(towerFloor?'無限塔第 '+towerFloor+' 層':'生存 '+formatTime(time)):'廟埕守護・無限塔';
-  info.append(status,detail);banner.append(createHeroPortrait(),info);container.append(banner);
+  const character=runInProgress?player.character:profile.character;
+  detail.textContent=runInProgress?characterNames[character]+' · 等級 '+player.level+' · '+(towerFloor?'無限塔第 '+towerFloor+' 層':'生存 '+formatTime(time)):characterNames[character]+' · 廟埕守護・無限塔';
+  info.append(status,detail);banner.append(createHeroPortrait(character),info);container.append(banner);
 }
-function mountLobbyCharacter(container){
-  const banner=document.createElement('div');banner.className='lobby-hero';
-  const info=document.createElement('div');lobbyHeading(info,'三太子');
-  const label=document.createElement('p');label.className='run-status';label.textContent='目前出戰';info.append(label);
-  banner.append(createHeroPortrait(),info);
+function mountLobbyCharacter(container,signal){
+  lobbyHeading(container,'角色名冊');
+  const roster=document.createElement('div');roster.className='character-roster';
+  const feedback=document.createElement('p');feedback.className='character-feedback';feedback.setAttribute('role','status');
+  const render=()=>{
+    roster.replaceChildren();
+    for(const [id,name] of Object.entries(characterNames)){
+      const locked=id==='jigong'&&!profile.jigongUnlocked,selected=profile.character===id;
+      const row=document.createElement('div');row.className='lobby-hero character-choice';
+      const art=document.createElement('div');art.className='character-art'+(locked?' is-locked':'');
+      const portrait=createHeroPortrait(id);
+      if(locked)portrait.setAttribute('aria-label','未解鎖的角色剪影');
+      art.append(portrait);
+      const info=document.createElement('div'),title=document.createElement('h3'),detail=document.createElement('p');
+      title.textContent=locked?'？？？':name;
+      detail.textContent=locked?'進入無限塔第 1 層後解鎖':id==='jigong'?jigongSpecs.map(spec=>spec.name).join('・'):skillNames.join('・');
+      info.append(title,detail);
+      if(selected){
+        const label=document.createElement('p');label.className='run-status';label.textContent=runInProgress?'下一局出戰':'目前出戰';info.append(label);
+      }else if(!locked){
+        const button=document.createElement('button');button.type='button';button.textContent='選擇出戰';button.disabled=selectingCharacter;
+        button.setAttribute('aria-label','選擇'+name+'出戰');
+        button.onclick=async()=>{
+          if(selectingCharacter)return;
+          selectingCharacter=button.disabled=true;refreshLobbyPlay();
+          try{
+            updateGameProfile(await accountRequest('character',{character:id}));
+            if(!signal.aborted)feedback.textContent=runInProgress?'下一局將由'+name+'出戰。':'已選擇'+name+'出戰。';
+          }catch(error){if(!signal.aborted)feedback.textContent=error.message;}
+          finally{selectingCharacter=false;refreshLobbyPlay();characterRefresh?.();}
+        };
+        info.append(button);
+      }else if(towerEntryPending){
+        const button=document.createElement('button');button.type='button';button.disabled=Boolean(unlockRequest);
+        button.textContent=unlockRequest?'同步解鎖紀錄中…':'重新同步解鎖紀錄';button.onclick=()=>void saveTowerUnlock();info.append(button);
+      }
+      row.append(art,info);roster.append(row);
+    }
+  };
+  characterRefresh=render;
+  signal.addEventListener('abort',()=>{if(characterRefresh===render)characterRefresh=null;},{once:true});
+  render();
   const heading=document.createElement('h3');heading.id='lobby-base-stats';heading.textContent='初始能力';
   const stats=document.createElement('dl');stats.className='lobby-stats';stats.setAttribute('aria-labelledby',heading.id);
   for(const [name,value] of [['血量',baseStats.hp],['攻擊力',baseStats.attack],['防禦力',baseStats.defense],['移動速度',baseStats.speed]]){
     const stat=document.createElement('div'),term=document.createElement('dt'),number=document.createElement('dd');
     term.textContent=name;number.textContent=value;stat.append(term,number);stats.append(stat);
   }
-  container.append(banner,heading,stats);
+  container.append(roster,feedback,heading,stats);
 }
 function mountLobbyRanking(container,signal){
   lobbyHeading(container,'無限塔排行榜');
@@ -1075,9 +1201,12 @@ function enterFloor(){
   boss=null;mobs=[];stars=[];drops=[];targetedBolts=[];shots=[];bricks=[];warnings=[];ingots=[];sparks=[];wheelTrail=[];
   enemyShots=[];nextEnemyAimAt=elapsed;
   magnetEffect=null;
+  jigongShots=[];
+  for(const skill of player.jigong)skill.castAt=null;
   player.x=mapWidth/2;player.y=mapHeight/2;
   heal(.25);
   trackCamera();setMode('play');
+  if(towerFloor===1&&!profile.jigongUnlocked){towerEntryPending=true;void saveTowerUnlock();}
 }
 function floorCleared(rewardXP=0,tomeFound=false){
   const mainStory=towerFloor===0;
@@ -1089,7 +1218,7 @@ function floorCleared(rewardXP=0,tomeFound=false){
   const choices=[[mainStory?'進入無限塔第 1 層':'前往第 '+(towerFloor+1)+' 層',enterFloor],['結束本局',()=>finish(true)]];
   if(canLearnThird){
     const missing=player.skillLevels.indexOf(0);
-    choices.unshift(['學習 '+skillNames[missing],()=>chooseSkill(missing,()=>floorCleared(rewardXP,tomeFound))]);
+    choices.unshift(['學習 '+activeSkillNames()[missing],()=>chooseSkill(missing,()=>floorCleared(rewardXP,tomeFound))]);
   }
   const details=canLearnThird?(tomeText||'第三個法寶欄已解鎖。'):
     rewardText+tomeText+'保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王。';
@@ -1130,9 +1259,11 @@ function hurt(value,source){
   if(player.hp===0)player.deathCause=source;
 }
 function poseForAttack(target){
+  if(player.character==='jigong'&&elapsed<player.attackUntil)return;
   const dx=target.x-player.x;
   player.attackFacing=Math.abs(dx)>2?Math.sign(dx):player.facing;
-  player.attackUntil=elapsed+.23;
+  player.attackAt=elapsed;
+  player.attackUntil=elapsed+(player.character==='jigong'?.315:.23);
 }
 function launchTargetedBolt(origin,target,speed,basePower=null){
   const angle=Math.atan2(target.y-origin.y,target.x-origin.x);
@@ -1145,13 +1276,59 @@ function explodeRingHit(center,value,enemies){
   }
   sparks.push({x:center.x,y:center.y,r:radius,life:ringExplosionLife,kind:'ring-burst'});
 }
+function launchJigongVolley(index,skill){
+  const spec=jigongSpecs[index],hits=new Map();
+  for(let i=0;i<skill.count;i++){
+    const angle=index===0?(i%8)*Math.PI/4+(i>=16?-Math.PI/16:i>=8?Math.PI/16:0):i*2*Math.PI/skill.count;
+    const x=player.x+Math.cos(angle)*18,y=player.y+Math.sin(angle)*18;
+    jigongShots.push({index,x,y,originX:player.x,originY:player.y,angle,phase:angle,age:0,life:spec.life,speed:spec.speed,r:spec.r,power:skill.power,seen:new Set(),hits});
+  }
+}
+function useJigongSkills(dt,target,enemies){
+  player.jigong.forEach((skill,index)=>{
+    if(!player.skillLevels[index])return;
+    skill.timer=Math.max(0,skill.timer-dt);
+    if(skill.castAt!==null&&elapsed>=skill.castAt){launchJigongVolley(index,skill);skill.castAt=null;}
+    if(skill.timer>0||skill.castAt!==null||!target||distance(target,player)>425)return;
+    poseForAttack(target);skill.castAt=elapsed+.10;skill.timer=skill.cooldown;
+  });
+  jigongShots=jigongShots.filter(shot=>{
+    const step=Math.min(dt,shot.life-shot.age);
+    const oldX=shot.x,oldY=shot.y;
+    shot.age+=step;
+    if(shot.index===2){
+      shot.angle=shot.phase+shot.age*3.25;
+      const radius=18+shot.age*shot.speed;
+      shot.x=shot.originX+Math.cos(shot.angle)*radius;shot.y=shot.originY+Math.sin(shot.angle)*radius;
+    }else{
+      shot.x+=Math.cos(shot.angle)*shot.speed*step;shot.y+=Math.sin(shot.angle)*shot.speed*step;
+    }
+    const dx=shot.x-oldX,dy=shot.y-oldY,travel=dx*dx+dy*dy;
+    const left=Math.min(oldX,shot.x),right=Math.max(oldX,shot.x),top=Math.min(oldY,shot.y),bottom=Math.max(oldY,shot.y);
+    for(const enemy of enemies){
+      const r=enemy.r+shot.r;
+      if(enemy.hp<=0||enemy.x<left-r||enemy.x>right+r||enemy.y<top-r||enemy.y>bottom+r||shot.seen.has(enemy))continue;
+      const px=enemy.x-oldX,py=enemy.y-oldY;
+      const t=travel?clamp((px*dx+py*dy)/travel,0,1):0;
+      if((px-dx*t)**2+(py-dy*t)**2>r*r)continue;
+      shot.seen.add(enemy);
+      const overlap=shot.hits.get(enemy)??0;
+      // Piercing keeps hitting new targets; overlapping rays are weaker on the same target.
+      if(overlap<3){shot.hits.set(enemy,overlap+1);damage(enemy,shot.power*(overlap?.35:1));}
+    }
+    return shot.age<shot.life;
+  });
+}
 function useSkills(dt,enemies){
   const qi=player.qi;
   qi.timer=Math.max(0,qi.timer-dt);
   player.ringTimer-=dt;player.brickTimer-=dt;
-  if(qi.timer===0||(player.rings&&player.ringTimer<=0)||(player.bricks&&player.brickTimer<=0)){
+  const jigong=player.character==='jigong';
+  let target;
+  if(qi.timer===0||(player.rings&&player.ringTimer<=0)||(player.bricks&&player.brickTimer<=0)||
+    (jigong&&player.jigong.some((skill,index)=>player.skillLevels[index]&&skill.timer<=dt))){
     const targets=nearestTargets(enemies);
-    const target=targets[0];
+    target=targets[0];
     const aim=target?Math.atan2(target.y-player.y,target.x-player.x):player.heading;
     if(qi.timer===0&&target&&distance(target,player)<=qiRange){
       poseForAttack(target);
@@ -1181,6 +1358,7 @@ function useSkills(dt,enemies){
       player.brickTimer=brickCooldown;
     }
   }
+  if(jigong)useJigongSkills(dt,target,enemies);
   targetedBolts=targetedBolts.filter(bolt=>{
     bolt.life-=dt;
     if(bolt.life<=0||bolt.target.hp<=0)return false;
@@ -1607,38 +1785,44 @@ function pixel(target,color,x,y,w,h){
   target.fillStyle=color;
   target.fillRect(x,y,w,h);
 }
-function drawHero(target,pose,x,y,size,facing){
-  const {column,anchorX,anchorY}=heroPoses[pose];
+function spriteFrame(character,pose){
+  if(character==='jigong')return {sheet:jigongSheet,cellWidth:840,column:Number.isInteger(pose)?pose:0,...jigongFrame};
+  return {sheet:heroSheet,cellWidth:heroCellSize,...heroPoses[pose]};
+}
+function drawHero(target,pose,x,y,size,facing,character){
+  const {sheet,cellWidth,column,anchorX,anchorY}=spriteFrame(character,pose);
+  const scale=size/heroCellSize;
   target.save();
   target.translate(Math.round(x),Math.round(y));
   if(facing>0)target.scale(-1,1);
   target.imageSmoothingEnabled=false;
-  target.drawImage(heroSheet,column*heroCellSize,0,heroCellSize,heroCellSize,
-    -anchorX/heroCellSize*size,-anchorY/heroCellSize*size,size,size);
+  target.drawImage(sheet,column*cellWidth,0,cellWidth,heroCellSize,-anchorX*scale,-anchorY*scale,cellWidth*scale,size);
   target.restore();
 }
 function drawHeroPortrait(canvas){
-  if(!heroSheet.naturalWidth)return;
+  const character=canvas.dataset.character??'nezha';
+  if(!characterSheet(character).naturalWidth)return;
   const target=canvas.getContext('2d');
   target.clearRect(0,0,canvas.width,canvas.height);
-  drawHero(target,'idle',canvas.width/2,canvas.height-7,canvas.width*.95,-1);
+  drawHero(target,'idle',canvas.width/2,canvas.height-7,canvas.width*.95,-1,character);
   canvas.dataset.loaded='';
 }
 function drawPlayerSprite(pose,x,y,facing){
-  const {column,anchorX,anchorY}=heroPoses[pose];
+  const {sheet,cellWidth,column,anchorX,anchorY}=spriteFrame(player.character,pose);
   const mirrored=facing>0;
   const size=Math.max(1,Math.round(heroWorldSize*viewZoom*spriteDensity));
-  const key=column+':'+size+':'+Number(mirrored);
+  const spriteWidth=Math.round(size*cellWidth/heroCellSize);
+  const key=column+':'+size+':'+Number(mirrored)+':'+player.character;
   if(key!==spriteRasterKey){
     spriteRasterKey=key;
     spriteCtx.setTransform(1,0,0,1,0,0);
     spriteCtx.clearRect(0,0,playerSprite.width,playerSprite.height);
     spriteCtx.imageSmoothingEnabled=false;
-    if(mirrored)spriteCtx.setTransform(-1,0,0,1,size,0);
-    spriteCtx.drawImage(heroSheet,column*heroCellSize,0,heroCellSize,heroCellSize,0,0,size,size);
+    if(mirrored)spriteCtx.setTransform(-1,0,0,1,spriteWidth,0);
+    spriteCtx.drawImage(sheet,column*cellWidth,0,cellWidth,heroCellSize,0,0,spriteWidth,size);
   }
   // Align both the sprite and its anchor to physical pixels, even at fractional zoom.
-  const left=Math.round((x-view.x)*viewZoom*spriteDensity)-Math.round((mirrored?heroCellSize-anchorX:anchorX)*size/heroCellSize);
+  const left=Math.round((x-view.x)*viewZoom*spriteDensity)-Math.round((mirrored?cellWidth-anchorX:anchorX)*spriteWidth/cellWidth);
   const top=Math.round((y-view.y)*viewZoom*spriteDensity)-Math.round(anchorY*size/heroCellSize);
   if(left!==spriteLeft||top!==spriteTop){
     spriteLeft=left;spriteTop=top;
@@ -1854,6 +2038,25 @@ function drawEnemyShot(shot){
   circle(shot.x,shot.y,shot.radius,'#ff8e66','#4d2d31',2);
   circle(shot.x,shot.y,shot.radius*.46,'#fff2bb');
 }
+function drawJigongShot(shot){
+  const {index,x,y,angle,age}=shot;
+  if(x<view.x-27||x>view.x+view.width+27||y<view.y-27||y>view.y+view.height+27)return;
+  ctx.save();ctx.translate(x,y);
+  if(index===0){
+    ctx.rotate(angle);
+    pixel(ctx,'#382820',-11,-5,18,9);pixel(ctx,'#a77a49',-9,-4,14,6);
+    pixel(ctx,'#e0bb71',-5,-4,5,5);pixel(ctx,'#ffe0a0',5,-3,4,5);pixel(ctx,'#795237',-10,4,20,3);
+  }else if(index===1){
+    ctx.rotate(angle);
+    pixel(ctx,'#14566b',-12,-4,23,9);pixel(ctx,'#49c2dc',-9,-6,16,12);
+    pixel(ctx,'#b5f5f3',0,-4,10,5);pixel(ctx,'#66d7ee',-17,-1,7,3);
+  }else{
+    const shift=Math.round(Math.sin(age*23)*4);
+    pixel(ctx,'#d4ffe6',-14+shift,-10,26,4);pixel(ctx,'#8bddba',-11-shift,-5,20,4);
+    pixel(ctx,'#4ea895',-7+shift,0,14,4);pixel(ctx,'#acdcbf',-4,5,9,4);
+  }
+  ctx.restore();
+}
 function drawPlayerHealth(){
   const w=44,h=8;
   const x=clamp(Math.round((player.x-view.x)*viewZoom-w/2),2,width-w-2);
@@ -1887,6 +2090,7 @@ function draw(){
   }
   if(boss)ghost(boss);
   for(const bolt of targetedBolts)drawTargetedBolt(bolt);
+  for(const shot of jigongShots)drawJigongShot(shot);
   for(const shot of shots)if(shot.lag<=0){
     if(shot.fire){
       for(let i=4;i>0;i--){
@@ -1925,8 +2129,9 @@ function draw(){
   pixel(ctx,'#18292e88',Math.round(x)-12,Math.round(y)+3,24,7);
   const flying=player.moving&&mode==='play';
   const attacking=player.attackUntil>elapsed;
-  if(heroSheet.naturalWidth){
-    const pose=attacking?'attack':flying?'fly':'idle';
+  if(characterSheet(player.character).naturalWidth){
+    const attackTime=elapsed-player.attackAt;
+    const pose=player.character==='jigong'?(attacking?(attackTime<.100?0:attackTime<.185?1:2):0):attacking?'attack':flying?'fly':'idle';
     const hover=attacking?0:Math.round(Math.sin(elapsed*(flying?15:5))*(flying?3:1));
     drawPlayerSprite(pose,x,y+7+hover,attacking?player.attackFacing:player.facing);
   }
@@ -2005,13 +2210,15 @@ function drawSkillHud(){
   setText(qiSlot.name,'氣功普攻');
   setText(qiSlot.status,'強化 '+qi.rank+' · '+qi.timer.toFixed(2)+' 秒');
   setProgress(qiSlot.bar,1-qi.timer/qi.cooldown);
-  const limits=[ringCooldown,wheelCooldown,brickCooldown];
-  const cooldowns=[player.ringTimer,player.wheelTimer,player.brickTimer];
+  const jigong=player.character==='jigong';
+  const limits=jigong?player.jigong.map(skill=>skill.cooldown):[ringCooldown,wheelCooldown,brickCooldown];
+  const cooldowns=jigong?player.jigong.map(skill=>skill.timer):[player.ringTimer,player.wheelTimer,player.brickTimer];
+  const names=activeSkillNames();
   const openSlot=hasFreeSkillSlot();
   skillSlots.forEach(({name,status,bar},index)=>{
     const level=player.skillLevels[index];
     const cooldown=Math.max(0,cooldowns[index]);
-    const title=player.evolved[index]?evolvedNames[index]:skillNames[index];
+    const title=player.evolved[index]?evolvedNames[index]:names[index];
     setText(name,(index+1)+' '+title);
     setText(status,level?'Lv.'+level+' · '+'CD '+cooldown.toFixed(1)+' 秒':openSlot?'尚未解鎖':'需絕世寶典');
     setProgress(bar,level?1-cooldown/limits[index]:0);
@@ -2027,6 +2234,35 @@ function setProgress(element,value,max=1){
   const next=clamp(value,0,max);
   if(element.value!==next||!element.hasAttribute('value'))element.value=next;
 }
+const updateHistory=[
+  {date:'2026-11-22',title:'濟公禪師加入廟埕',changes:[
+    ['新角色','擊敗主線超級龍王並進入無限塔第 1 層，即可解鎖濟公禪師。到大廳「角色」選擇下一局的出戰角色；暫停中的對局不會換角。'],
+    ['開道鞋','向八方射出貫穿鞋子，最多 20 隻。'],
+    ['葫蘆寶','從前、後、左、右射出貫穿水花，最多 16 個方位。'],
+    ['清新扇','扇出迴旋向外的龍捲風，最多 25 道。'],
+    ['戰鬥強化','濟公保留氣功普攻。法寶可強化傷害、數量或方位，並縮短冷卻時間。'],
+    ['遊戲介面','角色未解鎖時會以剪影顯示。右上方新增更新日誌；在遊戲中開啟時，本局會暫停。']
+  ]},
+  {date:'2026-11-22',title:'玩家大廳改版',changes:[
+    ['大廳','登入後可直接查看無限塔排行榜、聊天或查看角色。遊戲中回大廳不會清除對局進度。'],
+    ['行動裝置','廟埕支援雙指縮放，角色腳下新增即時血量條。三太子縮放時保留高解析度像素細節。']
+  ]}
+];
+for(const entry of updateHistory){
+  const section=document.createElement('section');
+  const title=document.createElement('h3');title.textContent=entry.title;
+  const date=document.createElement('time');date.dateTime=entry.date;date.textContent=entry.date.replaceAll('-','/');
+  const list=document.createElement('ul');
+  for(const [label,detail] of entry.changes){
+    const item=document.createElement('li'),heading=document.createElement('strong');heading.textContent=label+'：';
+    item.append(heading,detail);list.append(item);
+  }
+  section.append(title,date,list);document.querySelector('#update-entries').append(section);
+}
+document.querySelector('#updates').onclick=()=>{
+  if(mode==='play')togglePause();
+  if(!updateDialog.open)updateDialog.showModal();
+};
 let previous=null,framePending=false;
 function requestFrame(){
   if(framePending)return;
@@ -2041,6 +2277,8 @@ function frame(now){
     update(dt);
   }
   draw();
+  const unlocked=unlockToastUntil>elapsed;
+  if(unlockToast.hidden===unlocked)unlockToast.hidden=!unlocked;
   if(mode==='lobby')return;
   drawSkillHud();
   setText(health,Math.ceil(player.hp)+'/'+player.maxHp);
@@ -2067,11 +2305,12 @@ function frame(now){
 }
 resize();reset();setMode('loading');panel('神明Q仙傳','載入中…',[]);
 heroSheet.src=heroSheetUrl;
-accountRequest('session').then(({nickname})=>{
+accountRequest('session').then(({nickname,profile:accountProfile})=>{
   if(!nickname){location.replace('/games/nezha');return;}
   const nicknameLabel=document.querySelector('#nickname');
   nicknameLabel.textContent=nickname;
   nicknameLabel.title=nickname;
+  if(accountProfile)updateGameProfile(accountProfile);
   showLobby();
 }).catch(()=>{location.replace('/games/nezha');});
 document.querySelector('#logout').onclick=async()=>{

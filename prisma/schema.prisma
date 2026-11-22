@@ -8,13 +8,13 @@ datasource db {
 }
 
 model SiteContent {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  title       String
-  subtitle    String?
-  body        String
-  imageUrl    String?
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  key       String   @unique
+  title     String
+  subtitle  String?
+  body      String
+  imageUrl  String?
+  updatedAt DateTime @updatedAt
 }
 
 model Category {
@@ -90,14 +90,19 @@ model OrderItem {
 }
 
 model NezhaAccount {
-  id           String         @id @default(cuid())
-  username     String         @unique
-  salt         String
-  passwordHash String
-  nickname     String?
-  sessions     NezhaSession[]
-  score        NezhaScore?
-  chatMessages NezhaChatMessage[]
+  id                 String             @id @default(cuid())
+  username           String             @unique
+  salt               String
+  passwordHash       String
+  nickname           String?
+  suspendedAt        DateTime?
+  selectedCharacter  String             @default("nezha")
+  jigongUnlockedAt   DateTime?
+  unlockRunId        String?
+  unlockRunStartedAt DateTime?
+  sessions           NezhaSession[]
+  score              NezhaScore?
+  chatMessages       NezhaChatMessage[]
 }
 
 model NezhaChatMessage {
@@ -106,6 +111,7 @@ model NezhaChatMessage {
   account   NezhaAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   body      String       @db.VarChar(140)
   createdAt DateTime     @default(now())
+  hiddenAt  DateTime?
 
   @@index([createdAt])
   @@index([accountId])
@@ -122,14 +128,15 @@ model NezhaSession {
 }
 
 model NezhaScore {
-  accountId      String       @id
-  account        NezhaAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  cleared        Int
-  progress       Int
-  kills          Int
-  recordedAt     DateTime     @default(now())
-  message        String?      @db.VarChar(80)
-  messageCredits Int?
+  accountId       String       @id
+  account         NezhaAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  cleared         Int
+  progress        Int
+  kills           Int
+  recordedAt      DateTime     @default(now())
+  message         String?      @db.VarChar(80)
+  messageCredits  Int?
+  messageHiddenAt DateTime?
 
   @@index([cleared(sort: Desc), progress(sort: Desc), kills(sort: Desc), recordedAt, accountId])
 }

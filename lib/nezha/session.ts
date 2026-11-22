@@ -24,7 +24,7 @@ export async function gameSession(request: NextRequest) {
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
 
   return prisma.nezhaSession.findFirst({
-    where: { token: digest(token), expiresAt: { gt: new Date() } },
+    where: { token: digest(token), expiresAt: { gt: new Date() }, account: { suspendedAt: null } },
     select: { token: true, account: { select: { id: true, nickname: true } } }
   });
 }
@@ -106,6 +106,7 @@ export async function authenticate(
   if (!account || !timingSafeEqual(hash, Buffer.from(account.passwordHash, "hex"))) {
     throw new GameError(401, "帳號或密碼不正確。");
   }
+  if (account.suspendedAt) throw new GameError(403, "這個帳號目前已停用。");
 
   await prisma.$transaction(async (tx) => {
     await tx.nezhaSession.create({ data: { ...session, accountId: account.id } });

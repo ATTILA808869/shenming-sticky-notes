@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>GM 管理後台｜神明Q仙傳</title>
+<style>
+:root{color-scheme:dark;--ink:#fff2dc;--dim:#b9cecd;--line:#496264;--bg:#122228;--row:#1c3238;--accent:#ffd080}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);background:var(--bg);font:16px system-ui,sans-serif}[hidden]{display:none!important}
+main{max-width:1100px;margin:auto;padding:18px}h1{margin:0;font-size:24px}h2{font-size:19px;margin:16px 0 10px}
+header,nav,.controls,.pagination,.row-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+header{justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--line)}nav{margin-top:14px}
+button,input{font:inherit;border:1px solid var(--line);border-radius:4px;padding:8px 10px;color:inherit;background:#172c32;min-height:40px}
+button{cursor:pointer;font-weight:650}button:hover:enabled{background:#2b474b}button:disabled{opacity:.55;cursor:default}
+button[aria-current],.primary{color:#291d19;background:var(--accent);border-color:var(--accent)}
+button[aria-current]:hover,.primary:hover:enabled{background:#ffe1a2}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input{min-width:0}.controls label{min-width:0;flex:0 1 270px}.controls input{width:100%}
+#login{max-width:380px;margin:32px auto}#login label{display:grid;gap:6px;margin:12px 0}
+[role=status]{min-height:22px;color:var(--dim);margin:8px 0}
+.table{overflow:auto;border:1px solid var(--line);border-radius:4px}table{border-collapse:collapse;width:100%;min-width:590px;text-align:left}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#223c41;font-size:14px}tr:last-child td{border-bottom:0}
+tbody tr:nth-child(even){background:var(--row)}td{overflow-wrap:anywhere}td:nth-child(2){max-width:350px;white-space:pre-wrap}td:last-child{width:210px}
+small{display:block;color:var(--dim);margin-top:3px}.row-actions button{font-size:13px}.pagination{margin:14px 0}
+@media(max-width:500px){main{padding:12px}h1{font-size:20px}.controls label{flex-basis:200px}}
+</style>
+<main>
+  <header><h1>神明Q仙傳 GM 後台</h1><button id="logout" type="button" hidden>登出</button></header>
+  <form id="login" hidden>
+    <h2>GM 登入</h2>
+    <label>GM 帳號<input type="text" id="gm-username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="24" required></label>
+    <label>登入金鑰<input type="password" id="password" autocomplete="current-password" maxlength="256" required></label>
+    <button type="submit" class="primary">登入</button>
+    <p id="login-status" role="status"></p>
+  </form>
+  <section id="dashboard" hidden>
+    <nav aria-label="管理項目"></nav>
+    <h2 id="section-name"></h2>
+    <form id="search" class="controls">
+      <label><input type="search" id="query" maxlength="80" aria-label="搜尋關鍵字" placeholder="搜尋關鍵字"></label>
+      <button type="submit">搜尋</button><button type="button" id="reload">重新整理</button>
+    </form>
+    <p id="status" role="status"></p>
+    <div class="table" tabindex="0" aria-labelledby="section-name"><table><thead></thead><tbody></tbody></table></div>
+    <div class="pagination"><button id="prev" type="button">上一頁</button><span id="page-number"></span><button id="next" type="button">下一頁</button></div>
+  </section>
+</main>
+<script>
+const byId=id=>document.getElementById(id);
+const login=byId('login'),logout=byId('logout'),dashboard=byId('dashboard'),status=byId('status');
+const nav=dashboard.querySelector('nav'),body=document.querySelector('tbody'),head=document.querySelector('thead');
+const query=byId('query'),prev=byId('prev'),next=byId('next');
+const formatter=new Intl.DateTimeFormat('zh-TW',{dateStyle:'short',timeStyle:'short'});
+const views={chat:{name:'聊天紀錄',columns:['玩家','訊息','狀態','處理']},comments:{name:'排行榜留言',columns:['玩家','留言','狀態','處理']},accounts:{name:'玩家帳號',columns:['玩家','遊戲紀錄','狀態','處理']}};
+let section='chat',page=1,term='',signedIn=false,revision=0;
+async function request(route,data){
+  const options=data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{};
+  const response=await fetch('/games/nezha/gm/api/'+route,options);
+  if(response.status===401&&route!=='login')showLogin();
+  const result=await response.json();
+  if(!response.ok)throw new Error(result.error||'操作失敗。');
+  return result;
+}
+function showLogin(message=''){
+  signedIn=false;revision++;dashboard.hidden=logout.hidden=true;login.hidden=false;
+  body.replaceChildren();byId('password').value='';byId('login-status').textContent=message;
+}
+function showDashboard(){signedIn=true;login.hidden=true;dashboard.hidden=logout.hidden=false;void load();}
+function addCell(row,value,extra){
+  const cell=row.insertCell();cell.textContent=value;
+  if(extra){const detail=document.createElement('small');detail.textContent=extra;cell.append(detail);}
+  return cell;
+}
+function offer(to,id,action,label,confirmText,recordSection){
+  const button=document.createElement('button');button.type='button';button.textContent=label;
+  button.onclick=async()=>{
+    if(confirmText&&!window.confirm(confirmText))return;
+    for(const item of to.children)item.disabled=true;
+    try{
+      await request(recordSection,{id,action});
+      if(signedIn&&section===recordSection)await load('已完成「'+label+'」。');
+    }catch(error){if(signedIn)status.textContent=error.message;}
+    finally{for(const item of to.children)item.disabled=false;}
+  };
+  to.append(button);
+}
+function drawRows(rows){
+  body.replaceChildren();
+  for(const item of rows){
+    const row=body.insertRow();
+    const {username,nickname}=item.account??item;
+    addCell(row,nickname||'尚未設定暱稱',username);
+    const actions=document.createElement('div');actions.className='row-actions';
+    if(section==='chat'){
+      addCell(row,item.body,formatter.format(new Date(item.createdAt)));
+      addCell(row,item.hiddenAt?'已隱藏':'公開');
+      offer(actions,item.id,item.hiddenAt?'restore':'hide',item.hiddenAt?'還原':'隱藏',null,section);
+    }else if(section==='comments'){
+      addCell(row,item.message,'無限塔第 '+item.cleared+' 層');
+      addCell(row,item.messageHiddenAt?'已隱藏':'公開');
+      offer(actions,item.accountId,item.messageHiddenAt?'restore':'hide',item.messageHiddenAt?'還原':'隱藏',null,section);
+    }else{
+      const cleared=item.score?.cleared??0;
+      addCell(row,cleared?'無限塔第 '+cleared+' 層':'尚無上榜成績',item.jigongUnlockedAt||cleared?'已解鎖濟公禪師':'濟公禪師未解鎖');
+      addCell(row,item.suspendedAt?'停用':'正常');
+      offer(actions,item.id,item.suspendedAt?'restore':'suspend',item.suspendedAt?'恢復帳號':'停用帳號',item.suspendedAt?null:'停用 '+username+' 並登出該玩家？',section);
+      if(!item.suspendedAt)offer(actions,item.id,'revoke','撤銷登入','讓 '+username+' 從所有裝置登出？',section);
+    }
+    row.insertCell().append(actions);
+  }
+}
+async function load(done=''){
+  const version=++revision;
+  const view=views[section];
+  byId('section-name').textContent=view.name;byId('page-number').textContent='第 '+page+' 頁';
+  for(const button of nav.children){if(button.dataset.view===section)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}
+  head.replaceChildren();const header=head.insertRow();
+  for(const title of view.columns){const col=document.createElement('th');col.scope='col';col.textContent=title;header.append(col);}
+  body.replaceChildren();status.textContent='讀取中…';prev.disabled=next.disabled=true;
+  try{
+    const result=await request(section+'?'+new URLSearchParams({q:term,page:String(page)}));
+    if(!signedIn||version!==revision)return;
+    drawRows(result.rows);prev.disabled=page<=1;next.disabled=!result.more;
+    status.textContent=done||(!result.rows.length?'查無資料。':'');
+  }catch(error){if(signedIn&&version===revision)status.textContent=error.message;}
+}
+for(const [id,view] of Object.entries(views)){
+  const button=document.createElement('button');button.type='button';button.dataset.view=id;button.textContent=view.name;
+  button.onclick=()=>{section=id;page=1;term=query.value='';void load();};nav.append(button);
+}
+byId('search').onsubmit=event=>{event.preventDefault();term=query.value.trim();page=1;void load();};
+byId('reload').onclick=()=>void load();
+prev.onclick=()=>{if(page>1){page--;void load();}};next.onclick=()=>{if(!next.disabled){page++;void load();}};
+login.onsubmit=async event=>{
+  event.preventDefault();const button=login.querySelector('button');button.disabled=true;
+  try{await request('login',{username:byId('gm-username').value,password:byId('password').value});byId('password').value='';showDashboard();}
+  catch(error){byId('login-status').textContent=error.message;}
+  finally{button.disabled=false;}
+};
+logout.onclick=async()=>{
+  try{await request('logout',{});showLogin();}catch(error){status.textContent=error.message;}
+};
+request('session').then(({authenticated})=>authenticated?showDashboard():showLogin()).catch(error=>showLogin(error.message));
+</script>
+</html>

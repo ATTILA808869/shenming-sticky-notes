@@ -14,13 +14,13 @@ export async function getScores(accountId: string) {
     where: { cleared: { gt: 0 } },
     orderBy: rankOrder,
     take: leaderboardLimit,
-    select: { accountId: true, account: { select: { nickname: true } }, cleared: true, message: true, messageCredits: true }
+    select: { accountId: true, account: { select: { nickname: true } }, cleared: true, message: true, messageCredits: true, messageHiddenAt: true }
   });
 
   return scores.map((score) => ({
     nickname: score.account.nickname,
     cleared: score.cleared,
-    message: score.message,
+    message: score.messageHiddenAt ? null : score.message,
     messageCredits: score.accountId === accountId ? (score.messageCredits ?? 1) : 0
   }));
 }
@@ -36,7 +36,7 @@ export async function saveLeaderboardMessage(value: unknown, accountId: string) 
 
   const [updated] = await prisma.$queryRaw<{ messageCredits: number }[]>`
     UPDATE "NezhaScore"
-    SET "message" = ${message}, "messageCredits" = COALESCE("messageCredits", 1) - 1
+    SET "message" = ${message}, "messageCredits" = COALESCE("messageCredits", 1) - 1, "messageHiddenAt" = NULL
     WHERE "accountId" = ${accountId}
       AND COALESCE("messageCredits", 1) > 0
       AND "accountId" IN (
