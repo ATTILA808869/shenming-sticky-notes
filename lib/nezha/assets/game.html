@@ -147,7 +147,9 @@ const bossStages = [
 const maxMoveSpeed=100;
 const maxHealth=2000;
 const maxUpgradeLevel=25;
-const statGainPerLevel=.5;
+const attackGainPerLevel=1;
+const defenseGainPerLevel=.5;
+const enemyReferenceAttackGain=.5;
 const baseQi={damage:14,cooldown:1.05,targets:1};
 const qiRange=360;
 const qiSpeed=680;
@@ -313,24 +315,26 @@ function wheelSweepsEnemy(enemy,start,sweep,hitRadius){
   return gap*gap+wheelOrbitRadius*wheelOrbitRadius-2*gap*wheelOrbitRadius*Math.cos(angleGap)<reach*reach;
 }
 const challengeTime=()=>time+towerTime;
-function attackGrowth(){
+function skillAttackGrowth(){
   let skillGrowth=1;
   if(player.rings)skillGrowth=Math.max(skillGrowth,player.ringDamage/baseStats.attack*(player.evolved[0]?1.5:1));
   if(player.wheels)skillGrowth=Math.max(skillGrowth,player.wheelDamage/15);
   if(player.bricks)skillGrowth=Math.max(skillGrowth,player.brickDamage/42);
-  return player.attack/baseStats.attack*skillGrowth;
+  return skillGrowth;
 }
 function currentEnemyBalance(){
+  // Faster player attack growth should not raise the existing enemy difficulty curve.
+  const referenceAttack=player.attack-(player.level-1)*(attackGainPerLevel-enemyReferenceAttackGain);
   const durability=(player.maxHp/baseStats.hp)*(100+player.defense)/(100+baseStats.defense);
   const ringVolley=player.rings*player.ringDamage*(player.evolved[0]?1.5:1);
   const wheelSweep=player.wheels*player.wheelDamage;
   const brickVolley=player.bricks*player.brickDamage;
   return {
     time:challengeTime(),
-    attackGrowth:attackGrowth(),
+    attackGrowth:referenceAttack/baseStats.attack*skillAttackGrowth(),
     durability:Math.pow(durability,.65),
     level:Math.min(player.level,50),
-    burst:(ringVolley+wheelSweep+brickVolley)*player.attack/baseStats.attack,
+    burst:(ringVolley+wheelSweep+brickVolley)*referenceAttack/baseStats.attack,
     miniAttackScaling:miniBossThreshold>50
   };
 }
@@ -541,7 +545,7 @@ function showUpgrades(){
     options.push(choices[Math.floor(Math.random()*choices.length)]);
   }
   setMode('upgrade');
-  panel('升到 '+player.level+' 級','攻擊力＋'+statGainPerLevel+'、防禦力＋'+statGainPerLevel+'。法寶 Lv.10 搭配對應道具即可進化。',options);
+  panel('升到 '+player.level+' 級','攻擊力＋'+attackGainPerLevel+'、防禦力＋'+defenseGainPerLevel+'。法寶 Lv.10 搭配對應道具即可進化。',options);
 }
 async function accountRequest(path,data){
   const response=await fetch('/games/nezha/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
@@ -1053,8 +1057,8 @@ function update(dt){
   }else if(player.xp>=requiredXP){
     player.xp-=requiredXP;
     player.level++;
-    player.attack+=statGainPerLevel;
-    player.defense+=statGainPerLevel;
+    player.attack+=attackGainPerLevel;
+    player.defense+=defenseGainPerLevel;
     nextRewardAt=elapsed+rewardInterval;
     showUpgrades();
   }
