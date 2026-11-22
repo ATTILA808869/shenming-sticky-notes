@@ -1,12 +1,13 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { GameError, limitAttempts } from "./session";
+import { GameError, limitAttempts, parseNickname } from "./session";
 
 export const gmPath = "/games/nezha/gm";
 export const gmCookie = "nezha_gm";
 export const gmSessionSeconds = 45 * 60;
 const pageSize = 25;
+const muteDurations = [10, 60, 1440, 10080];
 const hash = (value: string) => createHash("sha256").update(value).digest();
 function gmCredentials(request: NextRequest) {
   const username = process.env.NEZHA_GM_USERNAME?.trim().toLowerCase() ?? "";
@@ -55,7 +56,7 @@ export async function listGmRecords(section: string, searchParams: URLSearchPara
   if (section === "chat") return page(await prisma.nezhaChatMessage.findMany({
     ...base, orderBy: { id: "desc" },
     where: q ? { OR: [{ body: { contains: q, mode: "insensitive" } }, { account: accountSearch }] } : undefined,
-    select: { id: true, body: true, createdAt: true, hiddenAt: true, account: { select: user } }
+    select: { id: true, body: true, createdAt: true, hiddenAt: true, account: { select: { ...user, id: true, chatMutedUntil: true } } }
   }));
   if (section === "comments") return page(await prisma.nezhaScore.findMany({
     ...base, orderBy: [{ recordedAt: "desc" }, { accountId: "asc" }],
@@ -64,19 +65,30 @@ export async function listGmRecords(section: string, searchParams: URLSearchPara
   }));
   if (section === "accounts") return page(await prisma.nezhaAccount.findMany({
     ...base, orderBy: { id: "desc" }, where: q ? accountSearch : undefined,
-    select: { id: true, ...user, suspendedAt: true, jigongUnlockedAt: true, score: { select: { cleared: true } } }
+    select: { id: true, ...user, suspendedAt: true, chatMutedUntil: true, jigongUnlockedAt: true, jigongGrantedAt: true, score: { select: { cleared: true } } }
   }));
   throw new GameError(404, "找不到管理項目。");
 }
 
 export async function updateGmRecord(section: string, data: Record<string, unknown>) {
   const { id, action } = data;
-  if (section === "chat" && typeof id === "number" && Number.isSafeInteger(id) && id > 0 && id <= 2147483647 && (action === "hide" || action === "restore")) {
-    const result = await prisma.nezhaChatMessage.updateMany({ where: { id }, data: { hiddenAt: action === "hide" ? new Date() : null } });
+  if (section === "chat" && typeof id === "number" && Number.isSafeInteger(id) && id > 0 && id <= 2147483647 &&
+      (action === "hide" || action === "restore" || action === "delete")) {
+    const result = action === "delete" ? await prisma.nezhaChatMessage.deleteMany({ where: { id } }) :
+      await prisma.nezhaChatMessage.updateMany({ where: { id }, data: { hiddenAt: action === "hide" ? new Date() : null } });
     if (!result.count) throw new GameError(404, "找不到聊天訊息。");
     return;
   }
   if (typeof id === "string" && /^[a-z0-9]{20,40}$/.test(id)) {
+    if (section === "comments" && action === "delete") {
+      const { message } = data;
+      if (typeof message !== "string" || !message || message.length > 80) throw new GameError(400, "請先選擇要刪除的留言。");
+      const result = await prisma.nezhaScore.updateMany({
+        where: { accountId: id, message }, data: { message: null, messageHiddenAt: null }
+      });
+      if (!result.count) throw new GameError(409, "這則留言已變更，請重新整理後再確認。");
+      return;
+    }
     if (section === "comments" && (action === "hide" || action === "restore")) {
       const result = await prisma.nezhaScore.updateMany({ where: { accountId: id, message: { not: null } }, data: { messageHiddenAt: action === "hide" ? new Date() : null } });
       if (!result.count) throw new GameError(404, "找不到榜單留言。");
@@ -89,6 +101,25 @@ export async function updateGmRecord(section: string, data: Record<string, unkno
           if (!result.count) throw new GameError(404, "找不到帳號。");
         }
         if (action !== "restore") await tx.nezhaSession.deleteMany({ where: { accountId: id } });
+      });
+      return;
+    }
+    if (section === "accounts" && (action === "mute" || action === "unmute" || action === "rename" || action === "grant-jigong" || action === "remove-jigong-grant")) {
+      let changes;
+      if (action === "mute") {
+        const { minutes } = data;
+        if (typeof minutes !== "number" || !muteDurations.includes(minutes)) throw new GameError(400, "請選擇有效的禁言時間。");
+        changes = { chatMutedUntil: new Date(Date.now() + minutes * 60_000) };
+      } else if (action === "unmute") changes = { chatMutedUntil: null };
+      else if (action === "rename") changes = { nickname: parseNickname(data.nickname) };
+      else changes = { jigongGrantedAt: action === "grant-jigong" ? new Date() : null };
+      await prisma.$transaction(async (tx) => {
+        const result = await tx.nezhaAccount.updateMany({ where: { id }, data: changes });
+        if (!result.count) throw new GameError(404, "找不到帳號。");
+        if (action === "remove-jigong-grant") await tx.nezhaAccount.updateMany({
+          where: { id, selectedCharacter: "jigong", jigongUnlockedAt: null, OR: [{ score: null }, { score: { cleared: { lt: 1 } } }] },
+          data: { selectedCharacter: "nezha" }
+        });
       });
       return;
     }

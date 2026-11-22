@@ -96,8 +96,10 @@ model NezhaAccount {
   passwordHash       String
   nickname           String?
   suspendedAt        DateTime?
+  chatMutedUntil     DateTime?
   selectedCharacter  String             @default("nezha")
   jigongUnlockedAt   DateTime?
+  jigongGrantedAt    DateTime?
   unlockRunId        String?
   unlockRunStartedAt DateTime?
   sessions           NezhaSession[]

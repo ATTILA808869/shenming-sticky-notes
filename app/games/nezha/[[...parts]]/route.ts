@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authenticate, cookieName, GameError, gamePath, gameSession, limitAttempts, sessionSeconds } from "@/lib/nezha/session";
+import { authenticate, cookieName, GameError, gamePath, gameSession, limitAttempts, parseNickname, sessionSeconds } from "@/lib/nezha/session";
 import { getScores, saveLeaderboardMessage, saveScore } from "@/lib/nezha/scores";
 import { getLobbyMessages, sendLobbyMessage } from "@/lib/nezha/lobby";
 import { getGameProfile, recordTowerEntry, selectGameCharacter, startUnlockRun } from "@/lib/nezha/progress";
@@ -196,10 +196,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return json(await recordTowerEntry(account.id, data.runId));
     }
     if (path === "api/nickname") {
-      const nickname = typeof data.nickname === "string" ? data.nickname.trim().normalize("NFC") : "";
-      if (!/^[\p{L}\p{N}_ -]{2,16}$/u.test(nickname)) {
-        throw new GameError(400, "暱稱須為 2～16 個字，可用中文、英數字、空格、底線或連字號。");
-      }
+      const nickname = parseNickname(data.nickname);
       const result = await prisma.nezhaAccount.updateMany({
         where: { id: account.id, nickname: null },
         data: { nickname }

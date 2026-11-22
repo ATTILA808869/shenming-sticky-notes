@@ -4,6 +4,7 @@ import { GameError, limitAttempts } from "@/lib/nezha/session";
 const historyLimit = 50;
 const historyWindowMs = 7 * 24 * 60 * 60 * 1000;
 const historyStart = () => new Date(Date.now() - historyWindowMs);
+const muteTime = new Intl.DateTimeFormat("zh-TW", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Taipei" });
 
 export async function getLobbyMessages() {
   const messages = await prisma.nezhaChatMessage.findMany({
@@ -23,7 +24,17 @@ export async function sendLobbyMessage(accountId: string, value: unknown) {
   if (await limitAttempts(`lobby:${accountId}`, 12)) {
     throw new GameError(429, "發送太快，請稍後再試。");
   }
-  const { id } = await prisma.nezhaChatMessage.create({ data: { accountId, body }, select: { id: true } });
+  const { id } = await prisma.$transaction(async (tx) => {
+    // Serialize sending with GM changes on the same account.
+    const [account] = await tx.$queryRaw<{ chatMutedUntil: Date | null; suspendedAt: Date | null }[]>`
+      SELECT "chatMutedUntil", "suspendedAt" FROM "NezhaAccount" WHERE "id" = ${accountId} FOR UPDATE
+    `;
+    if (!account || account.suspendedAt) throw new GameError(403, "帳號目前無法操作。");
+    if (account.chatMutedUntil && account.chatMutedUntil.getTime() > Date.now()) {
+      throw new GameError(403, `你目前在大廳禁言中，恢復時間：${muteTime.format(account.chatMutedUntil)}（台灣時間）。`);
+    }
+    return tx.nezhaChatMessage.create({ data: { accountId, body }, select: { id: true } });
+  });
   if (id % 64 === 0) {
     await prisma.nezhaChatMessage.deleteMany({ where: { createdAt: { lt: historyStart() } } })
       .catch((error: unknown) => console.error("Nezha lobby cleanup failed:", error));

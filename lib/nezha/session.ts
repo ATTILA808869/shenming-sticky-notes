@@ -19,6 +19,14 @@ export class GameError extends Error {
   }
 }
 
+export function parseNickname(value: unknown) {
+  const nickname = typeof value === "string" ? value.trim().normalize("NFC") : "";
+  if (!/^[\p{L}\p{N}_ -]{2,16}$/u.test(nickname)) {
+    throw new GameError(400, "暱稱須為 2～16 個字，可用中文、英數字、空格、底線或連字號。");
+  }
+  return nickname;
+}
+
 export async function gameSession(request: NextRequest) {
   const token = request.cookies.get(cookieName)?.value;
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;

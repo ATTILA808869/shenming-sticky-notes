@@ -10,18 +10,21 @@
 main{max-width:1100px;margin:auto;padding:18px}h1{margin:0;font-size:24px}h2{font-size:19px;margin:16px 0 10px}
 header,nav,.controls,.pagination,.row-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 header{justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--line)}nav{margin-top:14px}
-button,input{font:inherit;border:1px solid var(--line);border-radius:4px;padding:8px 10px;color:inherit;background:#172c32;min-height:40px}
+button,input,select{font:inherit;border:1px solid var(--line);border-radius:4px;padding:8px 10px;color:inherit;background:#172c32;min-height:40px}
 button{cursor:pointer;font-weight:650}button:hover:enabled{background:#2b474b}button:disabled{opacity:.55;cursor:default}
 button[aria-current],.primary{color:#291d19;background:var(--accent);border-color:var(--accent)}
 button[aria-current]:hover,.primary:hover:enabled{background:#ffe1a2}
-button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 input{min-width:0}.controls label{min-width:0;flex:0 1 270px}.controls input{width:100%}
 #login{max-width:380px;margin:32px auto}#login label{display:grid;gap:6px;margin:12px 0}
 [role=status]{min-height:22px;color:var(--dim);margin:8px 0}
 .table{overflow:auto;border:1px solid var(--line);border-radius:4px}table{border-collapse:collapse;width:100%;min-width:590px;text-align:left}
 th,td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#223c41;font-size:14px}tr:last-child td{border-bottom:0}
-tbody tr:nth-child(even){background:var(--row)}td{overflow-wrap:anywhere}td:nth-child(2){max-width:350px;white-space:pre-wrap}td:last-child{width:210px}
-small{display:block;color:var(--dim);margin-top:3px}.row-actions button{font-size:13px}.pagination{margin:14px 0}
+tbody tr:nth-child(even){background:var(--row)}td{overflow-wrap:anywhere}td:nth-child(2){max-width:350px;white-space:pre-wrap}td:last-child{width:225px}
+small{display:block;color:var(--dim);margin-top:3px}.row-actions button{font-size:13px;min-height:34px;padding:5px 8px}.pagination{margin:14px 0}
+.danger{color:#ffc8be;border-color:#985b55}
+dialog{width:min(390px,calc(100% - 24px));max-height:85svh;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:6px;background:var(--row);color:var(--ink)}
+dialog::backdrop{background:#091417b8}dialog h2{margin:0 0 5px}dialog label{display:grid;gap:6px;margin-top:12px}
 @media(max-width:500px){main{padding:12px}h1{font-size:20px}.controls label{flex-basis:200px}}
 </style>
 <main>
@@ -45,12 +48,22 @@ small{display:block;color:var(--dim);margin-top:3px}.row-actions button{font-siz
     <div class="pagination"><button id="prev" type="button">上一頁</button><span id="page-number"></span><button id="next" type="button">下一頁</button></div>
   </section>
 </main>
+<dialog id="action-dialog" aria-labelledby="action-title">
+  <form id="action-form">
+    <h2 id="action-title"></h2><small id="action-account"></small>
+    <div id="action-fields"></div><p id="action-status" role="status"></p>
+    <div class="controls"><button id="action-cancel" type="button">取消</button><button id="action-save" type="submit" class="primary">確認</button></div>
+  </form>
+</dialog>
 <script>
 const byId=id=>document.getElementById(id);
 const login=byId('login'),logout=byId('logout'),dashboard=byId('dashboard'),status=byId('status');
 const nav=dashboard.querySelector('nav'),body=document.querySelector('tbody'),head=document.querySelector('thead');
 const query=byId('query'),prev=byId('prev'),next=byId('next');
+const actionDialog=byId('action-dialog'),actionForm=byId('action-form');
+const actionSave=byId('action-save'),actionCancel=byId('action-cancel');
 const formatter=new Intl.DateTimeFormat('zh-TW',{dateStyle:'short',timeStyle:'short'});
+const muteOptions=[[10,'10 分鐘'],[60,'1 小時'],[1440,'24 小時'],[10080,'7 天']];
 const views={chat:{name:'聊天紀錄',columns:['玩家','訊息','狀態','處理']},comments:{name:'排行榜留言',columns:['玩家','留言','狀態','處理']},accounts:{name:'玩家帳號',columns:['玩家','遊戲紀錄','狀態','處理']}};
 let section='chat',page=1,term='',signedIn=false,revision=0;
 async function request(route,data){
@@ -63,6 +76,7 @@ async function request(route,data){
 }
 function showLogin(message=''){
   signedIn=false;revision++;dashboard.hidden=logout.hidden=true;login.hidden=false;
+  if(actionDialog.open)actionDialog.close();
   body.replaceChildren();byId('password').value='';byId('login-status').textContent=message;
 }
 function showDashboard(){signedIn=true;login.hidden=true;dashboard.hidden=logout.hidden=false;void load();}
@@ -71,40 +85,86 @@ function addCell(row,value,extra){
   if(extra){const detail=document.createElement('small');detail.textContent=extra;cell.append(detail);}
   return cell;
 }
-function offer(to,id,action,label,confirmText,recordSection){
+actionCancel.onclick=()=>actionDialog.close();
+actionDialog.addEventListener('cancel',event=>{if(actionSave.disabled)event.preventDefault();});
+function editPlayer(title,account,field,submit){
+  byId('action-title').textContent=title;byId('action-account').textContent=account.username;
+  byId('action-status').textContent='';
+  const label=document.createElement('label');
+  let control;
+  if(field==='minutes'){
+    label.textContent='禁言時間';control=document.createElement('select');
+    for(const [duration,name] of muteOptions){const option=document.createElement('option');option.value=duration;option.textContent=name;control.append(option);}
+    control.value='60';
+  }else{
+    label.textContent='新暱稱';control=document.createElement('input');control.maxLength=32;control.required=true;control.value=account.nickname??'';
+  }
+  label.append(control);byId('action-fields').replaceChildren(label);
+  actionForm.onsubmit=async event=>{
+    event.preventDefault();actionSave.disabled=actionCancel.disabled=true;
+    try{
+      await submit({[field]:field==='minutes'?Number(control.value):control.value});
+      actionDialog.close();
+    }catch(error){byId('action-status').textContent=error.message;}
+    finally{actionSave.disabled=actionCancel.disabled=false;}
+  };
+  actionDialog.showModal();control.focus();
+}
+function offer(to,id,action,label,{route=section,confirmText,extra,field,account,danger=false}={}){
+  const currentView=section;
   const button=document.createElement('button');button.type='button';button.textContent=label;
+  if(danger)button.className='danger';
+  const submit=async payload=>{
+    await request(route,{id,action,...extra,...payload});
+    if(signedIn&&section===currentView)await load('已完成「'+label+'」。');
+  };
   button.onclick=async()=>{
+    if(field){editPlayer(label,account,field,submit);return;}
     if(confirmText&&!window.confirm(confirmText))return;
     for(const item of to.children)item.disabled=true;
     try{
-      await request(recordSection,{id,action});
-      if(signedIn&&section===recordSection)await load('已完成「'+label+'」。');
+      await submit();
     }catch(error){if(signedIn)status.textContent=error.message;}
     finally{for(const item of to.children)item.disabled=false;}
   };
   to.append(button);
 }
+const isMuted=account=>account.chatMutedUntil&&Date.parse(account.chatMutedUntil)>Date.now();
+const muteStatus=account=>isMuted(account)?'禁言至 '+formatter.format(new Date(account.chatMutedUntil)):null;
+function offerMute(actions,account){
+  if(isMuted(account))offer(actions,account.id,'unmute','解除禁言',{route:'accounts'});
+  else offer(actions,account.id,'mute','禁言',{route:'accounts',field:'minutes',account});
+}
 function drawRows(rows){
   body.replaceChildren();
   for(const item of rows){
     const row=body.insertRow();
-    const {username,nickname}=item.account??item;
+    const account=item.account??item;
+    const {username,nickname}=account;
     addCell(row,nickname||'尚未設定暱稱',username);
     const actions=document.createElement('div');actions.className='row-actions';
     if(section==='chat'){
       addCell(row,item.body,formatter.format(new Date(item.createdAt)));
-      addCell(row,item.hiddenAt?'已隱藏':'公開');
-      offer(actions,item.id,item.hiddenAt?'restore':'hide',item.hiddenAt?'還原':'隱藏',null,section);
+      addCell(row,item.hiddenAt?'已隱藏':'公開',muteStatus(account));
+      offer(actions,item.id,item.hiddenAt?'restore':'hide',item.hiddenAt?'還原':'隱藏');
+      offer(actions,item.id,'delete','刪除',{confirmText:'確定永久刪除 '+username+' 這則聊天訊息？此操作無法還原。',danger:true});
+      offerMute(actions,account);
     }else if(section==='comments'){
       addCell(row,item.message,'無限塔第 '+item.cleared+' 層');
       addCell(row,item.messageHiddenAt?'已隱藏':'公開');
-      offer(actions,item.accountId,item.messageHiddenAt?'restore':'hide',item.messageHiddenAt?'還原':'隱藏',null,section);
+      offer(actions,item.accountId,item.messageHiddenAt?'restore':'hide',item.messageHiddenAt?'還原':'隱藏');
+      offer(actions,item.accountId,'delete','刪除留言',{confirmText:'確定刪除 '+username+' 的排行榜留言？只移除文字，名次與成績會保留。',extra:{message:item.message},danger:true});
     }else{
       const cleared=item.score?.cleared??0;
-      addCell(row,cleared?'無限塔第 '+cleared+' 層':'尚無上榜成績',item.jigongUnlockedAt||cleared?'已解鎖濟公禪師':'濟公禪師未解鎖');
-      addCell(row,item.suspendedAt?'停用':'正常');
-      offer(actions,item.id,item.suspendedAt?'restore':'suspend',item.suspendedAt?'恢復帳號':'停用帳號',item.suspendedAt?null:'停用 '+username+' 並登出該玩家？',section);
-      if(!item.suspendedAt)offer(actions,item.id,'revoke','撤銷登入','讓 '+username+' 從所有裝置登出？',section);
+      const earned=Boolean(item.jigongUnlockedAt||cleared>=1);
+      addCell(row,cleared?'無限塔第 '+cleared+' 層':'尚無上榜成績',earned?'濟公：遊戲解鎖':item.jigongGrantedAt?'濟公：GM 開放':'濟公：未解鎖');
+      addCell(row,item.suspendedAt?'停用':'正常',muteStatus(item));
+      offer(actions,item.id,'rename','修改暱稱',{field:'nickname',account});
+      if(item.jigongGrantedAt)offer(actions,item.id,'remove-jigong-grant','收回手動開放',{confirmText:'收回 '+username+' 的 GM 角色開放？玩家自己取得的解鎖資格不受影響。'});
+      else if(!earned)offer(actions,item.id,'grant-jigong','開放濟公',{confirmText:'為 '+username+' 開放濟公禪師？'});
+      offerMute(actions,item);
+      offer(actions,item.id,item.suspendedAt?'restore':'suspend',item.suspendedAt?'恢復帳號':'停用帳號',{confirmText:item.suspendedAt?null:'停用 '+username+' 並登出該玩家？'});
+      if(!item.suspendedAt)offer(actions,item.id,'revoke','撤銷登入',{confirmText:'讓 '+username+' 從所有裝置登出？'});
     }
     row.insertCell().append(actions);
   }
