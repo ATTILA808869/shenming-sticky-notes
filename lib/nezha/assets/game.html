@@ -71,6 +71,9 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
   main{padding-block:5px;gap:4px}
   .card{padding:10px}.card h1{font-size:21px;margin:2px 0 5px}
   .card .portrait{width:56px;height:56px}.card p{margin:4px 0 6px}
+  .card:has(.tome-actions) .portrait{display:none}
+  .tome-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tome-actions button:first-child{grid-column:1/-1}
   #gear,.hint .controls{display:none}
 }
 </style>
@@ -151,9 +154,16 @@ const bossStages = [
 const maxMoveSpeed=100;
 const maxHealth=2000;
 const maxUpgradeLevel=25;
-const attackGainPerLevel=1;
-const defenseGainPerLevel=.5;
-const enemyReferenceAttackGain=.5;
+const attackGainPerLevel=2;
+const defenseGainPerLevel=1;
+const milestoneLevels=10;
+const milestoneStatFactor=1.05;
+const enemyReferenceStatGain=.5;
+const swordAttackGain=4;
+const armorDefenseGain=9;
+const normalSkillLimit=2;
+const skillTomeChance=.005;
+const favoriteRouteFactor=1.30;
 const baseQi={cooldown:1.05,targets:1};
 const qiAttackGain=3;
 const qiRange=360;
@@ -211,10 +221,10 @@ function trackCamera(){
 }
 function reset(){
   player = {x:mapWidth/2,y:mapHeight/2,hp:baseStats.hp,maxHp:baseStats.hp,defense:baseStats.defense,attack:baseStats.attack,speed:baseStats.speed,
-    qi:{...baseQi,rank:1,timer:0,attackBonus:0},
+    qi:{...baseQi,rank:1,timer:0},
     xp:0,level:1,rings:0,ringDamage:baseStats.attack,pattern:0,wheels:0,wheelDamage:15,
     wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
-    skillLevels:[0,0,0], evolved:[false,false,false], gear:[0,0,0,0],
+    skillLevels:[0,0,0], skillRoutes:[null,null,null], skillTome:false, evolved:[false,false,false], gear:[0,0,0,0],
     healTimer:0,
     moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1};
   mobs=[]; stars=[]; sparks=[]; qiBolts=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
@@ -254,6 +264,7 @@ function panel(title,desc,choices,portrait=false){
   });
   card.append(h,p,actions);
   if(mode!=='ready') actions.querySelector('button:enabled')?.focus({preventScroll:true});
+  return actions;
 }
 function start(){reset();setMode('play');}
 function retryHeroSheet(){
@@ -328,9 +339,11 @@ function skillAttackGrowth(){
   return skillGrowth;
 }
 function currentEnemyBalance(){
-  // Preserve the enemy curve without scaling it up for the player's attack bonuses.
-  const referenceAttack=player.attack-(player.level-1)*(attackGainPerLevel-enemyReferenceAttackGain)-player.qi.attackBonus;
-  const durability=(player.maxHp/baseStats.hp)*(100+player.defense)/(100+baseStats.defense);
+  // Keep the existing enemy curve independent of the new player-only stat gains.
+  const levelGrowth=(player.level-1)*enemyReferenceStatGain;
+  const referenceAttack=baseStats.attack+levelGrowth+player.gear[3]*swordAttackGain;
+  const referenceDefense=baseStats.defense+levelGrowth+player.gear[1]*armorDefenseGain;
+  const durability=(player.maxHp/baseStats.hp)*(100+referenceDefense)/(100+baseStats.defense);
   const ringVolley=player.rings*player.ringDamage*(player.evolved[0]?1.5:1);
   const wheelSweep=player.wheels*player.wheelDamage;
   const brickVolley=player.bricks*player.brickDamage;
@@ -466,16 +479,51 @@ const ingotRadius=66;
 function applyEvolutions(){
   player.evolved=player.skillLevels.map((level,index)=>level>=10&&player.gear[evolutionGear[index]]>0);
 }
-function choosePattern(){
-  panel('選擇乾坤圈型態','選定後，本局會沿用這個發射型態。',patterns.map((name,index)=>[
-    name,()=>{player.rings=1;player.skillLevels[0]=1;player.pattern=index;setMode('play');}
-  ]));
-}
-const unlocks=[
-  ['乾坤圈・選擇發射型態',choosePattern],
-  ['超級風火輪・繞身旋轉',()=>{player.wheels=1;player.skillLevels[1]=1;setMode('play');}],
-  ['超級金磚・範圍攻擊與暈眩',()=>{player.bricks=1;player.skillLevels[2]=1;setMode('play');}]
+const skillUnlocks=[
+  ['乾坤圈・選擇發射型態',pattern=>{player.rings=1;player.pattern=pattern;}],
+  ['超級風火輪・繞身旋轉',()=>{player.wheels=1;}],
+  ['超級金磚・範圍攻擊與暈眩',()=>{player.bricks=1;}]
 ];
+const skillUpgradeRoutes=[
+  [
+    {key:'count',label:'發射數量＋1',available:()=>player.rings<8,apply:()=>player.rings++},
+    {key:'damage',label:'傷害＋7',apply:()=>player.ringDamage+=7}
+  ],
+  [
+    {key:'count',label:'數量＋1',available:()=>player.wheels<maxWheels,apply:()=>player.wheels++},
+    {key:'damage',label:'傷害＋6',apply:()=>player.wheelDamage+=6},
+    {key:'speed',label:'旋轉速度＋20%',apply:()=>player.wheelSpeed*=1.2}
+  ],
+  [
+    {key:'count',label:'投擲數量＋1',available:()=>player.bricks<5,apply:()=>player.bricks++},
+    {key:'damage',label:'傷害＋8',apply:()=>player.brickDamage+=8}
+  ]
+];
+const learnedSkillCount=()=>player.skillLevels.filter(Boolean).length;
+const skillSlotLimit=()=>player.skillTome?skillNames.length:normalSkillLimit;
+const hasFreeSkillSlot=()=>learnedSkillCount()<skillSlotLimit();
+function chooseSkill(index,resume=()=>setMode('play')){
+  if(player.skillLevels[index]||!hasFreeSkillSlot())return;
+  function chooseRoute(pattern){
+    panel(skillNames[index]+'強化路線','選定的強化選項，出現機率提高 30%。',skillUpgradeRoutes[index].map(({key,label})=>[label,()=>{
+      skillUnlocks[index][1](pattern);
+      player.skillLevels[index]=1;
+      player.skillRoutes[index]=key;
+      resume();
+    }]));
+  }
+  if(index===0){
+    panel('選擇乾坤圈型態','選定後，本局會沿用這個發射型態。',patterns.map((name,i)=>[name,()=>chooseRoute(i)]));
+  }else chooseRoute();
+}
+function rollUpgradeOption(choices){
+  const favorite=choices.find(choice=>choice[2]);
+  if(choices.length===1)return choices[0];
+  if(!favorite)return choices[Math.floor(Math.random()*choices.length)];
+  if(Math.random()<favoriteRouteFactor/choices.length)return favorite;
+  const alternatives=choices.filter(choice=>choice!==favorite);
+  return alternatives[Math.floor(Math.random()*alternatives.length)];
+}
 function availableGearUpgrades(includeMaxed=false){
   const options=[];
   function add(index,label,apply){
@@ -486,8 +534,8 @@ function availableGearUpgrades(includeMaxed=false){
     }]);
     else if(includeMaxed)options.push([gearNames[index]+'・已達上限',null]);
   }
-  add(3,'攻擊力＋4',()=>player.attack+=4);
-  add(1,'防禦力＋9',()=>player.defense+=9);
+  add(3,'攻擊力＋'+swordAttackGain,()=>player.attack+=swordAttackGain);
+  add(1,'防禦力＋'+armorDefenseGain,()=>player.defense+=armorDefenseGain);
   const speedGain=Math.min(4,maxMoveSpeed-player.speed);
   add(2,'移動速度＋'+speedGain,speedGain>0?()=>player.speed+=speedGain:null);
   // The 25 health upgrades add up to 1,900 HP.
@@ -512,33 +560,27 @@ function showGearReward(){
 }
 function showUpgrades(){
   const groups=new Map();
-  function option(group,label,apply){
+  function option(group,label,apply,preferred=false){
     if(!groups.has(group))groups.set(group,[]);
-    groups.get(group).push([label,apply]);
+    groups.get(group).push([label,apply,preferred]);
   }
-  function skill(index,label,apply){
+  const openSlot=hasFreeSkillSlot();
+  skillUnlocks.forEach(([label],index)=>{
     const level=player.skillLevels[index];
+    if(!level){
+      if(openSlot)option(index,label,()=>chooseSkill(index));
+      return;
+    }
     if(level>=maxUpgradeLevel)return;
     const name=player.evolved[index]?evolvedNames[index]:skillNames[index];
     const requirement=level===9&&!player.gear[evolutionGear[index]]?'・進化需'+gearNames[evolutionGear[index]]:'';
-    option(index,name+' Lv.'+(level+1)+'・'+label+requirement,()=>{
-      apply();player.skillLevels[index]++;applyEvolutions();setMode('play');
+    skillUpgradeRoutes[index].forEach(route=>{
+      if(route.available&&!route.available())return;
+      option(index,name+' Lv.'+(level+1)+'・'+route.label+requirement,()=>{
+        route.apply();player.skillLevels[index]++;applyEvolutions();setMode('play');
+      },route.key===player.skillRoutes[index]);
     });
-  }
-  if(!player.rings)option(0,...unlocks[0]);
-  else {
-    if(player.rings<8)skill(0,'發射數量＋1',()=>player.rings++);
-    skill(0,'傷害＋7',()=>player.ringDamage+=7);
-  }
-  if(!player.wheels)option(1,...unlocks[1]);
-  else {
-    if(player.wheels<maxWheels)skill(1,'數量＋1',()=>player.wheels++);
-    skill(1,'傷害＋6',()=>player.wheelDamage+=6);
-    skill(1,'旋轉速度＋20%',()=>player.wheelSpeed*=1.2);
-  }
-  if(!player.bricks)option(2,...unlocks[2]);
-  else if(player.bricks<5)skill(2,'投擲數量＋1',()=>player.bricks++);
-  else skill(2,'傷害＋8',()=>player.brickDamage+=8);
+  });
   const qi=player.qi;
   if(qi.rank<maxUpgradeLevel){
     function upgradeQi(label,apply){
@@ -551,10 +593,7 @@ function showUpgrades(){
       upgradeQi('攻速提升・間隔 '+nextCooldown.toFixed(2)+' 秒',()=>{qi.cooldown=nextCooldown;});
     }
     if(qi.targets<qiMaxTargets)upgradeQi('目標數＋1',()=>qi.targets++);
-    upgradeQi('人物攻擊力＋'+qiAttackGain,()=>{
-      qi.attackBonus+=qiAttackGain;
-      player.attack+=qiAttackGain;
-    });
+    upgradeQi('人物攻擊力＋'+qiAttackGain,()=>player.attack+=qiAttackGain);
   }
   availableGearUpgrades().forEach(([label,apply],index)=>option('gear'+index,label,chooseGear(apply)));
   if(!groups.size)return;
@@ -562,10 +601,11 @@ function showUpgrades(){
   const options=[];
   while(options.length<3&&available.length){
     const [choices]=available.splice(Math.floor(Math.random()*available.length),1);
-    options.push(choices[Math.floor(Math.random()*choices.length)]);
+    options.push(rollUpgradeOption(choices));
   }
   setMode('upgrade');
-  panel('升到 '+player.level+' 級','攻擊力＋'+attackGainPerLevel+'、防禦力＋'+defenseGainPerLevel+'。法寶 Lv.10 搭配對應道具即可進化。',options);
+  const milestone=player.level%milestoneLevels===0?'總攻擊力與總防禦力再＋5%。':'';
+  panel('升到 '+player.level+' 級','攻擊力＋'+attackGainPerLevel+'、防禦力＋'+defenseGainPerLevel+'。'+milestone+'法寶 Lv.10 搭配對應道具即可進化。',options);
 }
 async function accountRequest(path,data){
   const response=await fetch('/games/nezha/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
@@ -689,14 +729,22 @@ function enterFloor(){
   heal(.25);
   trackCamera();setMode('play');
 }
-function floorCleared(rewardXP=0){
+function floorCleared(rewardXP=0,tomeFound=false){
   const mainStory=towerFloor===0;
   clearedFloors=towerFloor;
   setMode('upgrade');
   const rewardText=rewardXP?'獲得 '+rewardXP+' XP。':'';
-  panel(mainStory?'超級龍王退散！':'無限塔第 '+towerFloor+' 層通過',
-    rewardText+'保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王。',
-    [[mainStory?'進入無限塔第 1 層':'前往第 '+(towerFloor+1)+' 層',enterFloor],['結束本局',()=>finish(true)]],true);
+  const tomeText=tomeFound?'獲得絕世寶典！第三個法寶欄已解鎖。':'';
+  const canLearnThird=player.skillTome&&learnedSkillCount()===normalSkillLimit;
+  const choices=[[mainStory?'進入無限塔第 1 層':'前往第 '+(towerFloor+1)+' 層',enterFloor],['結束本局',()=>finish(true)]];
+  if(canLearnThird){
+    const missing=player.skillLevels.indexOf(0);
+    choices.unshift(['學習 '+skillNames[missing],()=>chooseSkill(missing,()=>floorCleared(rewardXP,tomeFound))]);
+  }
+  const details=canLearnThird?(tomeText||'第三個法寶欄已解鎖。'):
+    rewardText+tomeText+'保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王。';
+  const actions=panel(mainStory?'超級龍王退散！':'無限塔第 '+towerFloor+' 層通過',details,choices,true);
+  if(canLearnThird)actions.classList.add('tome-actions');
 }
 function spawnTowerGuardian(){
   const guardian=towerGuardians[(towerFloor-1)%towerGuardians.length];
@@ -1073,7 +1121,11 @@ function update(dt){
     kills++;warnings=[];
     const rewardXP=boss.xp??0;
     player.xp+=rewardXP;
-    if(towerFloor||nextBoss===bossStages.length){boss=null;floorCleared(rewardXP);return;}
+    if(towerFloor||nextBoss===bossStages.length){
+      const tomeFound=towerFloor>0&&!player.skillTome&&Math.random()<skillTomeChance;
+      if(tomeFound)player.skillTome=true;
+      boss=null;floorCleared(rewardXP,tomeFound);return;
+    }
     sparks.push({x:boss.x,y:boss.y,value:rewardXP,life:bossXPNoticeTime,kind:'boss-xp'});
     dropItem(boss);
     boss=null;
@@ -1089,6 +1141,10 @@ function update(dt){
     player.level++;
     player.attack+=attackGainPerLevel;
     player.defense+=defenseGainPerLevel;
+    if(player.level%milestoneLevels===0){
+      player.attack*=milestoneStatFactor;
+      player.defense*=milestoneStatFactor;
+    }
     nextRewardAt=elapsed+rewardInterval;
     showUpgrades();
   }
@@ -1437,12 +1493,13 @@ function drawSkillHud(){
   qiSlot.bar.value=clamp(1-qi.timer/qi.cooldown,0,1);
   const limits=[ringCooldown,wheelCooldown,brickCooldown];
   const cooldowns=[player.ringTimer,player.wheelTimer,player.brickTimer];
+  const openSlot=hasFreeSkillSlot();
   skillSlots.forEach(({name,status,bar},index)=>{
     const level=player.skillLevels[index];
     const cooldown=Math.max(0,cooldowns[index]);
     const title=player.evolved[index]?evolvedNames[index]:skillNames[index];
     name.textContent=(index+1)+' '+title;
-    status.textContent=level?'Lv.'+level+' · '+'CD '+cooldown.toFixed(1)+' 秒':'尚未解鎖';
+    status.textContent=level?'Lv.'+level+' · '+'CD '+cooldown.toFixed(1)+' 秒':openSlot?'尚未解鎖':'需絕世寶典';
     bar.value=level?clamp(1-cooldown/limits[index],0,1):0;
   });
   gear.textContent=gearNames.map((name,index)=>name+' Lv.'+player.gear[index]).join('　');
@@ -1455,8 +1512,8 @@ function frame(now){
   draw();
   drawSkillHud();
   health.textContent=Math.ceil(player.hp)+'/'+player.maxHp;
-  attack.textContent=player.attack;
-  defense.textContent=player.defense;
+  attack.textContent=Math.round(player.attack*100)/100;
+  defense.textContent=Math.round(player.defense*100)/100;
   moveSpeed.textContent=player.speed+'/'+maxMoveSpeed;
   drawWaveHud();
   clock.textContent=towerFloor?'無限塔 '+towerFloor+' 層':formatTime(time)+(boss?' 暫停':' / '+formatTime(rounds));
