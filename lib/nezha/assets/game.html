@@ -64,6 +64,19 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 .ranking-editor label,.card [role=status]{font-weight:700;font-size:14px}
 .ranking-editor textarea{width:100%;min-height:56px;resize:vertical;padding:6px 8px;border:1px solid #a38b66;border-radius:3px;background:#152931;color:var(--ink);font:inherit}
 .ranking-editor button{justify-self:start;padding:5px 12px}
+html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!important}
+.card:has(.lobby-room){width:min(650px,100%);text-align:left}
+.lobby-room{display:grid;gap:8px;margin-bottom:12px}
+.lobby-log{height:clamp(96px,42dvh,420px);overflow:auto;overscroll-behavior:contain;margin:0;padding:0 12px;list-style:none;background:#152931;border:1px solid var(--line);border-radius:4px}
+.lobby-log li{padding:9px 0;border-bottom:1px solid #52666880;overflow-wrap:anywhere}
+.lobby-log li:last-child{border-bottom:none}
+.lobby-meta{display:flex;align-items:baseline;justify-content:space-between;gap:8px;color:var(--gold);font-size:13px}
+.lobby-meta time{flex-shrink:0;color:var(--muted);font-size:12px}
+.lobby-log span{display:block;margin-top:3px;line-height:1.45;font-size:14px}
+.lobby-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}
+.lobby-form input{width:100%;min-width:0;border:1px solid var(--line);border-radius:4px;padding:8px;background:#152931;color:var(--ink);font:inherit}
+.lobby-form input:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.lobby-room [role=status]:empty{display:none}
 @media(max-width:560px){
   main{padding:8px;gap:6px}header strong{font-size:18px}.account{gap:4px;font-size:12px}
   .hud{inset-inline:6px;top:6px;grid-template-columns:minmax(0,max-content) 1fr auto}
@@ -83,6 +96,7 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
   .card:has(.tome-actions) .portrait{display:none}
   .tome-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tome-actions button:first-child{grid-column:1/-1}
+  .lobby-log{height:32dvh}
   #gear,.hint .controls{display:none}
 }
 @media(min-width:540px) and (max-height:470px){
@@ -230,6 +244,7 @@ let magnetEffect;
 let camera = {x:0,y:0};
 let width, height, player, mobs, stars, sparks, time, spawn, kills, mode;
 let stick = null;
+let closeLobby = null;
 const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
 const unit = (x,y) => {const length = Math.hypot(x,y) || 1; return [x/length,y/length];};
@@ -265,8 +280,10 @@ function reset(){
   trackCamera();
 }
 function setMode(next){
+  if(mode==='lobby'&&next!=='lobby'){closeLobby?.();closeLobby=null;}
   mode=next; overlay.hidden=next==='play'; pause.disabled=next!=='play';
   document.documentElement.classList.toggle('playing',next==='play');
+  document.documentElement.classList.toggle('lobby',next==='lobby');
   if(next!=='play'){releaseStick();keys.clear();}
   else optionButtons=[];
 }
@@ -306,16 +323,20 @@ function showStart(){
   setMode('ready');
   const play=heroSheetFailed?['重試載入角色',retryHeroSheet]:heroSheet.naturalWidth?['開始守廟埕',start]:['角色載入中…',null];
   const description=heroSheetFailed?'三太子圖片載入失敗，請重試。':'探索廟埕、擊退小幽靈，在第 2、5、8 分鐘迎戰魔王。擊倒超級龍王後，帶著法寶進入無限塔。';
-  panel('神明Q仙傳',description,[play,['無限塔排行榜',()=>showLeaderboard(showStart)]],true);
+  panel('神明Q仙傳',description,[play,['回到大廳',()=>showLobby()],['無限塔排行榜',()=>showLeaderboard(showStart)]],true);
 }
 function togglePause(){
   if(mode==='play'){
-    setMode('paused'); panel('休息一下','準備好就回廟埕繼續玩。',[['繼續遊戲',()=>setMode('play')],['重新開始',start]]);
+    setMode('paused');
+    const resume=()=>setMode('play');
+    panel('休息一下','準備好就回廟埕繼續玩。',[
+      ['繼續遊戲',resume],['重新開始',start],['回到大廳',()=>showLobby(resume,'繼續遊戲')]
+    ]);
   }else if(mode==='paused')setMode('play');
 }
 pause.onclick=togglePause;
 document.addEventListener('keydown',event=>{
-  if(event.target instanceof HTMLTextAreaElement)return;
+  if(event.target instanceof HTMLTextAreaElement||event.target instanceof HTMLInputElement)return;
   const key=event.key.toLowerCase();
   if(mode!=='play'&&/^[1-8]$/.test(key)&&!event.altKey&&!event.ctrlKey&&!event.metaKey){
     const choice=optionButtons[Number(key)-1];
@@ -698,12 +719,85 @@ function continueLevelUps(resume){
 function spendSavedXP(){
   if(mode==='play'&&player.xp>=needed())continueLevelUps(()=>setMode('play'));
 }
-async function accountRequest(path,data){
-  const response=await fetch('/games/nezha/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
+async function accountRequest(path,data,signal){
+  const init=data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal}:{signal};
+  const response=await fetch('/games/nezha/api/'+path,init);
   if(response.status===401){location.replace('/games/nezha');throw new Error('請重新登入。');}
   const result=await response.json();
   if(!response.ok)throw new Error(result.error||'請稍後再試。');
   return result;
+}
+function showLobby(enterGame=showStart,entryLabel='進入遊戲'){
+  setMode('lobby');
+  const actions=panel('大廳聊天室','',[[entryLabel,enterGame]]);
+  card.querySelector('p').hidden=true;
+  const room=document.createElement('section');room.className='lobby-room';
+  const log=document.createElement('ol');log.className='lobby-log';
+  log.setAttribute('role','log');log.setAttribute('aria-label','大廳訊息');log.tabIndex=0;
+  const state=document.createElement('div');state.setAttribute('role','status');state.textContent='載入聊天室…';
+  const form=document.createElement('form');form.className='lobby-form';
+  const input=document.createElement('input');input.placeholder='輸入訊息';input.required=true;
+  input.maxLength=280;input.autocomplete='off';input.setAttribute('aria-label','大廳訊息內容');
+  const send=document.createElement('button');send.type='submit';send.textContent='發送';
+  const feedback=document.createElement('div');feedback.setAttribute('role','status');
+  form.append(input,send);room.append(log,state,form,feedback);actions.before(room);
+
+  const controller=new AbortController();
+  const {signal}=controller;
+  const formatter=new Intl.DateTimeFormat('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  let timer,revision=0;
+  closeLobby=()=>{controller.abort();clearTimeout(timer);};
+  function render(messages){
+    const follow=log.scrollHeight-log.scrollTop-log.clientHeight<36;
+    const existing=new Map(Array.from(log.children,row=>[Number(row.dataset.id),row]));
+    let next=log.firstElementChild;
+    for(const message of messages){
+      let row=existing.get(message.id);
+      if(!row){
+        row=document.createElement('li');row.dataset.id=message.id;
+        const meta=document.createElement('div');meta.className='lobby-meta';
+        const author=document.createElement('strong');author.textContent=message.nickname;
+        const time=document.createElement('time');time.dateTime=message.createdAt;
+        time.textContent=formatter.format(new Date(message.createdAt));
+        const body=document.createElement('span');body.textContent=message.body;
+        meta.append(author,time);row.append(meta,body);
+      }
+      if(row!==next)log.insertBefore(row,next);
+      next=row.nextElementSibling;
+    }
+    while(next){const extra=next;next=next.nextElementSibling;extra.remove();}
+    state.textContent=messages.length?'':'目前還沒有訊息。';
+    if(follow)log.scrollTop=log.scrollHeight;
+  }
+  async function refresh(){
+    const version=++revision;
+    try{
+      const {messages}=await accountRequest('lobby',null,signal);
+      if(!signal.aborted&&version===revision)render(messages);
+    }catch(error){
+      if(!signal.aborted&&version===revision)state.textContent=error.message;
+    }
+  }
+  async function poll(){
+    if(!document.hidden)await refresh();
+    if(!signal.aborted)timer=setTimeout(poll,5000);
+  }
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(send.disabled)return;
+    const message=input.value.trim();
+    if(!message||[...message].length>140){feedback.textContent='訊息須為 1～140 個字。';return;}
+    send.disabled=true;feedback.textContent='';
+    try{
+      await accountRequest('lobby',{message},signal);
+      if(signal.aborted)return;
+      if(input.value.trim()===message)input.value='';
+      await refresh();
+      if(!signal.aborted)log.scrollTop=log.scrollHeight;
+    }catch(error){if(!signal.aborted)feedback.textContent=error.message;}
+    finally{send.disabled=false;}
+  });
+  void poll();
 }
 function addLeaderboardEditor(score,messageLabel,list){
   const form=document.createElement('form');
@@ -1754,13 +1848,14 @@ function frame(now){
   xp.max=requiredXP;xp.value=player.xp;
   requestAnimationFrame(frame);
 }
-resize();reset();showStart();
+resize();reset();setMode('loading');panel('神明Q仙傳','載入中…',[]);
 heroSheet.src=heroSheetUrl;
 accountRequest('session').then(({nickname})=>{
   if(!nickname){location.replace('/games/nezha');return;}
   const nicknameLabel=document.querySelector('#nickname');
   nicknameLabel.textContent=nickname;
   nicknameLabel.title=nickname;
+  showLobby();
 }).catch(()=>{location.replace('/games/nezha');});
 document.querySelector('#logout').onclick=async()=>{
   try{await accountRequest('logout',{});location.replace('/games/nezha');}

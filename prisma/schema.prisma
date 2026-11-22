@@ -97,6 +97,18 @@ model NezhaAccount {
   nickname     String?
   sessions     NezhaSession[]
   score        NezhaScore?
+  chatMessages NezhaChatMessage[]
+}
+
+model NezhaChatMessage {
+  id        Int          @id @default(autoincrement())
+  accountId String
+  account   NezhaAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  body      String       @db.VarChar(140)
+  createdAt DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([accountId])
 }
 
 model NezhaSession {

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticate, cookieName, GameError, gamePath, gameSession, limitAttempts, sessionSeconds } from "@/lib/nezha/session";
 import { getScores, saveLeaderboardMessage, saveScore } from "@/lib/nezha/scores";
+import { getLobbyMessages, sendLobbyMessage } from "@/lib/nezha/lobby";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -129,6 +130,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         if (session?.account.nickname) return json({ scores: await getScores(session.account.id) });
         break;
       }
+      case "api/lobby": {
+        if ((await gameSession(request))?.account.nickname) return json({ messages: await getLobbyMessages() });
+        break;
+      }
       default:
         return json({ error: "找不到頁面。" }, 404);
     }
@@ -173,6 +178,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         throw new GameError(429, "送出太頻繁，請稍後再試。");
       }
       return json(await saveLeaderboardMessage(data.message, account.id));
+    }
+    if (path === "api/lobby") {
+      if (!account.nickname) throw new GameError(403, "請先設定暱稱。");
+      await sendLobbyMessage(account.id, data.message);
+      return json({ ok: true }, 201);
     }
     if (path === "api/score") {
       if (!account.nickname) throw new GameError(403, "請先設定暱稱。");
