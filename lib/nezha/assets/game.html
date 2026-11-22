@@ -146,6 +146,7 @@ const mapHeight = 2160;
 const wheelOrbitRadius = 96;
 const wheelHitRadius = 23;
 const wheelEvolutionScale = Math.SQRT2;
+const wheelKnockbackCooldown = .5;
 const maxWheels = 8;
 const tileWidth = 48;
 const pickupRadius = 2 * tileWidth;
@@ -200,12 +201,22 @@ const mobKinds={
   healer:{hp:.85,attack:.58,speed:.8,radius:13},
   caster:{hp:.95,attack:.74,speed:.82,radius:13}
 };
+const rangedAttacks={
+  shade:{range:255,windup:.8,recovery:4.9,speed:180,radius:5,power:.60},
+  runner:{range:220,windup:.62,recovery:4.5,speed:230,radius:4,power:.55},
+  guard:{range:280,windup:1,recovery:5.6,speed:158,radius:8,power:.72},
+  healer:{range:255,windup:.85,recovery:6.2,speed:177,radius:5,power:.58},
+  caster:{range:280,windup:1.15,recovery:6,radius:30,power:.85,seal:true},
+  mini:{range:320,windup:.88,recovery:3.7,speed:222,radius:8,power:.78}
+};
+const projectilePlayerRadius=12;
 const towerGoal=1000;
 let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline;
 let optionButtons=[];
 const miniBossChance=.30;
 let nextWave, waveSlots, miniBossKills, miniBossThreshold, gearRewards, nextRewardAt;
-let boss, nextBoss, elapsed, qiBolts, shots, bricks, warnings, drops, ingots, wheelTrail, trailTimer;
+let boss, nextBoss, elapsed, targetedBolts, shots, bricks, warnings, drops, ingots, wheelTrail, trailTimer;
+let enemyShots, nextEnemyAimAt;
 let magnetEffect;
 let camera = {x:0,y:0};
 let width, height, player, mobs, stars, sparks, time, spawn, kills, mode;
@@ -233,9 +244,10 @@ function reset(){
     xp:0,level:1,rings:0,ringDamage:baseStats.attack,pattern:0,wheels:0,wheelDamage:15,
     wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
     skillLevels:[0,0,0], skillRoutes:[null,null,null], skillTome:false, evolved:[false,false,false], gear:[0,0,0,0],
-    healTimer:0,deathCause:null,
+    deathCause:null,
     moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1};
-  mobs=[]; stars=[]; sparks=[]; qiBolts=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
+  mobs=[]; stars=[]; sparks=[]; targetedBolts=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
+  enemyShots=[];nextEnemyAimAt=0;
   magnetEffect=null;
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
   towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
@@ -399,7 +411,8 @@ function addMob(wave=false,kind=chooseMobKind(),angle=Math.random()*Math.PI*2){
     y:clamp(player.y+Math.sin(angle)*radius,15,mapHeight-15),
     hp,maxHp:hp,attack:scaledEnemyAttack((8+time*.037+midgame*.008+endgame*.014)*(wave?.48:1)*traits.attack,balance),
     speed:(67+time*.10+endgame*.04)*traits.speed,r:traits.radius,kind,
-    flash:0,stun:0,phase:Math.random()*6,abilityAt:elapsed+2+Math.random()*3});
+    flash:0,stun:0,phase:Math.random()*6,abilityAt:elapsed+2+Math.random()*3,
+    rangedReadyAt:elapsed+1.4+Math.random()*2.2});
 }
 function splitWaveAngle(slot){
   const horizontalRoom=Math.min(player.x,mapWidth-player.x);
@@ -444,7 +457,7 @@ function addMiniBoss(){
   mobs.push({...type,mini:true,hp,maxHp:hp,attack:scaledEnemyAttack(type.attack+time*.022,balance),
     x:clamp(player.x+Math.cos(angle)*185,25,mapWidth-25),
     y:clamp(player.y+Math.sin(angle)*185,25,mapHeight-25),
-    flash:0,stun:0,phase:Math.random()*6});
+    flash:0,stun:0,phase:Math.random()*6,rangedReadyAt:elapsed+1+Math.random()*1.2});
 }
 function regularLevelXP(targetLevel){
   if(targetLevel<=20)return 5+10*(targetLevel-2);
@@ -481,9 +494,15 @@ const gearNames=['大魂丹','神甲','神馬','神刀'];
 const evolutionGear=[3,2,1];
 const patterns=['集中','扇形','八方'];
 const ringCooldown=.78;
+const ringExplosionChance=.30;
+const ringExplosionDamage=.45;
+const ringExplosionLife=.4;
 const brickCooldown=5;
 const wheelCooldown=.28;
-const ingotRadius=66;
+const ingotRange=230;
+const ingotShotInterval=1;
+const ingotShotDamage=.45;
+const ingotShotSpeed=560;
 function applyEvolutions(){
   player.evolved=player.skillLevels.map((level,index)=>level>=10&&player.gear[evolutionGear[index]]>0);
 }
@@ -751,9 +770,9 @@ function enterFloor(){
   towerFloor++;floorKills=0;floorTime=0;spawn=.65;
   // Share one stat baseline so the 15% multiplier is the only growth from floor 5.
   if(towerFloor===towerBaselineFloor)towerBaseline=currentEnemyBalance();
-  boss=null;mobs=[];stars=[];drops=[];qiBolts=[];shots=[];bricks=[];warnings=[];ingots=[];sparks=[];wheelTrail=[];
+  boss=null;mobs=[];stars=[];drops=[];targetedBolts=[];shots=[];bricks=[];warnings=[];ingots=[];sparks=[];wheelTrail=[];
+  enemyShots=[];nextEnemyAimAt=elapsed;
   magnetEffect=null;
-  player.healTimer=0;
   player.x=mapWidth/2;player.y=mapHeight/2;
   heal(.25);
   trackCamera();setMode('play');
@@ -813,6 +832,17 @@ function poseForAttack(target){
   player.attackFacing=Math.abs(dx)>2?Math.sign(dx):player.facing;
   player.attackUntil=elapsed+.23;
 }
+function launchTargetedBolt(origin,target,speed,basePower=null){
+  const angle=Math.atan2(target.y-origin.y,target.x-origin.x);
+  targetedBolts.push({x:origin.x,y:origin.y,angle,target,speed,basePower,life:1});
+}
+function explodeRingHit(center,value,enemies){
+  const radius=center.r*5;
+  for(const enemy of enemies){
+    if(enemy!==center&&enemy.hp>0&&distance(center,enemy)<=radius)damage(enemy,value*ringExplosionDamage);
+  }
+  sparks.push({x:center.x,y:center.y,r:radius,life:ringExplosionLife,kind:'ring-burst'});
+}
 function useSkills(dt,enemies){
   const qi=player.qi;
   qi.timer=Math.max(0,qi.timer-dt);
@@ -825,8 +855,7 @@ function useSkills(dt,enemies){
       poseForAttack(target);
       for(const enemy of targets.slice(0,qi.targets)){
         if(distance(enemy,player)>qiRange)break;
-        const angle=Math.atan2(enemy.y-player.y,enemy.x-player.x);
-        qiBolts.push({x:player.x,y:player.y,angle,target:enemy,life:1});
+        launchTargetedBolt(player,enemy,qiSpeed);
       }
       qi.timer=qi.cooldown;
     }
@@ -850,11 +879,15 @@ function useSkills(dt,enemies){
       player.brickTimer=brickCooldown;
     }
   }
-  qiBolts=qiBolts.filter(bolt=>{
+  targetedBolts=targetedBolts.filter(bolt=>{
     bolt.life-=dt;
     if(bolt.life<=0||bolt.target.hp<=0)return false;
-    const gap=distance(bolt,bolt.target),step=qiSpeed*dt;
-    if(gap<=step+bolt.target.r){applyHit(bolt.target,player.attack);return false;}
+    const gap=distance(bolt,bolt.target),step=bolt.speed*dt;
+    if(gap<=step+bolt.target.r){
+      if(bolt.basePower===null)applyHit(bolt.target,player.attack);
+      else damage(bolt.target,bolt.basePower);
+      return false;
+    }
     const dx=bolt.target.x-bolt.x,dy=bolt.target.y-bolt.y;
     bolt.angle=Math.atan2(dy,dx);
     bolt.x+=dx*step/gap;bolt.y+=dy*step/gap;
@@ -867,7 +900,11 @@ function useSkills(dt,enemies){
     if(shot.life<=0)return false;
     shot.x+=Math.cos(shot.angle)*415*dt;shot.y+=Math.sin(shot.angle)*415*dt;
     const hit=enemies.find(enemy=>enemy.hp>0&&distance(shot,enemy)<enemy.r+11);
-    if(hit)damage(hit,player.ringDamage*(shot.fire?1.5:1));
+    if(hit){
+      const value=player.ringDamage*(shot.fire?1.5:1);
+      damage(hit,value);
+      if(shot.fire&&Math.random()<ringExplosionChance)explodeRingHit(hit,value,enemies);
+    }
     return !hit;
   });
   bricks=bricks.filter(brick=>{
@@ -879,7 +916,7 @@ function useSkills(dt,enemies){
       damage(enemy,player.brickDamage);
       if(Math.random()<.5)enemy.stun=3;
     }
-    if(brick.ingot)ingots.push({x:brick.x,y:brick.y,life:10});
+    if(brick.ingot)ingots.push({x:brick.x,y:brick.y,life:10,nextShotAt:elapsed+ingotShotInterval});
     return false;
   });
 }
@@ -895,23 +932,83 @@ function dropItem(enemy){
   const kind=roll<.075?'heal':roll<.10?'magnet':roll<.15?'bomb':null;
   if(kind)drops.push({x:enemy.x+20,y:enemy.y,kind});
 }
-function useEnemyAbility(enemy,allies,gap){
+function healEnemyAllies(enemy,allies){
   if(elapsed<enemy.abilityAt)return;
-  if(enemy.kind==='healer'){
-    enemy.abilityAt=elapsed+4;
-    let healed=0;
-    for(const ally of allies){
-      if(ally===enemy||ally===boss||ally.hp<=0||ally.hp>=ally.maxHp||distance(enemy,ally)>105)continue;
-      ally.hp=Math.min(ally.maxHp,ally.hp+Math.ceil(ally.maxHp*.10));
-      ally.healFlashUntil=elapsed+.4;
-      if(++healed>=3)break;
-    }
-  }else if(enemy.kind==='caster'&&gap<=280){
-    enemy.abilityAt=elapsed+6;
-    if(warnings.filter(mark=>mark.kind==='seal').length>=3)return;
-    warnings.push({x:player.x,y:player.y,r:30,life:1.15,duration:1.15,damage:enemy.attack,kind:'seal',source:'施法怪的封印'});
-    enemy.castingUntil=elapsed+.4;
+  enemy.abilityAt=elapsed+4;
+  let healed=0;
+  for(const ally of allies){
+    if(ally===enemy||ally===boss||ally.hp<=0||ally.hp>=ally.maxHp||distance(enemy,ally)>105)continue;
+    ally.hp=Math.min(ally.maxHp,ally.hp+Math.ceil(ally.maxHp*.10));
+    ally.healFlashUntil=elapsed+.4;
+    if(++healed>=3)break;
   }
+}
+function rangedThreatLimit(){
+  if(boss?.hp>0)return 2;
+  return towerFloor?4:time<60?1:time<180?2:3;
+}
+function fireEnemyAttack(enemy,aim){
+  const profile=aim.profile;
+  const strength=enemy.attack*profile.power;
+  if(profile.seal){
+    if(distance(aim,player)<profile.radius)hurt(strength,'施法怪的封印');
+    sparks.push({x:aim.x,y:aim.y,life:.32,r:profile.radius});
+    return;
+  }
+  const offset=Math.min(12,enemy.r);
+  enemyShots.push({x:enemy.x+aim.dx*offset,y:enemy.y+aim.dy*offset,dx:aim.dx,dy:aim.dy,
+    speed:profile.speed,radius:profile.radius,life:(profile.range+24)/profile.speed,
+    damage:strength,source:(enemy.name??'怪物')+'的遠距離攻擊'});
+}
+function advanceEnemyShots(dt,fromX,fromY){
+  enemyShots=enemyShots.filter(shot=>{
+    const step=Math.min(dt,shot.life);
+    const dx=shot.dx*shot.speed*step,dy=shot.dy*shot.speed*step;
+    // Sweep in relative space so shots also collide correctly with a moving player.
+    const x=shot.x-fromX,y=shot.y-fromY;
+    const portion=dt?step/dt:0;
+    const vx=dx-(player.x-fromX)*portion,vy=dy-(player.y-fromY)*portion;
+    const closest=clamp(-(x*vx+y*vy)/(vx*vx+vy*vy||1),0,1);
+    if((x+vx*closest)**2+(y+vy*closest)**2<=(shot.radius+projectilePlayerRadius)**2){
+      hurt(shot.damage,shot.source);
+      return false;
+    }
+    shot.x+=dx;shot.y+=dy;shot.life-=dt;
+    return shot.life>0&&shot.x>=0&&shot.x<=mapWidth&&shot.y>=0&&shot.y<=mapHeight;
+  });
+}
+function updateEnemyRanged(dt,fromX,fromY){
+  advanceEnemyShots(dt,fromX,fromY);
+  let active=enemyShots.length;
+  let candidate=null,profile=null,oldest=Infinity;
+  for(const enemy of mobs){
+    if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed){
+      if(enemy.aim){enemy.aim=null;enemy.rangedReadyAt=elapsed+.85;}
+      continue;
+    }
+    if(enemy.aim){
+      if(elapsed>=enemy.aim.firesAt){
+        const aim=enemy.aim;
+        enemy.aim=null;
+        fireEnemyAttack(enemy,aim);
+        if(!aim.profile.seal)active++;
+        enemy.rangedReadyAt=elapsed+aim.profile.recovery+Math.random()*.65;
+      }else active++;
+      continue;
+    }
+    const readyAt=enemy.rangedReadyAt??0;
+    if(elapsed<nextEnemyAimAt||elapsed<readyAt||readyAt>=oldest)continue;
+    if(enemy.x<camera.x||enemy.x>camera.x+width||enemy.y<camera.y||enemy.y>camera.y+height)continue;
+    const attack=rangedAttacks[enemy.mini?'mini':enemy.kind]??rangedAttacks.shade;
+    if(distance(enemy,player)>attack.range)continue;
+    candidate=enemy;profile=attack;oldest=readyAt;
+  }
+  if(!candidate||player.hp<=0||active>=rangedThreatLimit())return;
+  const [dx,dy]=unit(player.x-candidate.x,player.y-candidate.y);
+  candidate.aim={x:player.x,y:player.y,dx:dx||(!dy?(candidate.facing||1):0),dy,
+    profile,firesAt:elapsed+profile.windup};
+  if(dx)candidate.facing=Math.sign(dx);
+  nextEnemyAimAt=elapsed+(!towerFloor&&time<60?1:.65);
 }
 function attract(item,dt,radius,speed){
   const gap=distance(item,player);
@@ -994,11 +1091,23 @@ function collectLoot(dt){
     return false;
   });
 }
-function updateIngotHealing(dt){
-  const inRange=ingots.some(ingot=>ingot.life>0&&distance(ingot,player)<ingotRadius);
-  player.healTimer=inRange?player.healTimer+dt:0;
-  if(player.healTimer>=1){heal(.02);player.healTimer-=1;}
-  ingots=ingots.filter(ingot=>(ingot.life-=dt)>0);
+function updateIngots(dt,enemies){
+  ingots=ingots.filter(ingot=>{
+    ingot.life-=dt;
+    if(ingot.life<=0)return false;
+    if(elapsed<ingot.nextShotAt)return true;
+    let target=null,nearest=ingotRange;
+    for(const enemy of enemies){
+      if(enemy.hp<=0)continue;
+      const gap=distance(ingot,enemy);
+      if(gap<=nearest){target=enemy;nearest=gap;}
+    }
+    if(target){
+      launchTargetedBolt(ingot,target,ingotShotSpeed,player.brickDamage*ingotShotDamage);
+      ingot.nextShotAt+=ingotShotInterval;
+    }else ingot.nextShotAt=elapsed+.16;
+    return true;
+  });
 }
 function separateEnemies(enemies){
   if(enemies.length<2)return;
@@ -1053,6 +1162,7 @@ function update(dt){
   if(player.moving)player.heading=Math.atan2(dy,dx);
   if(dx)player.facing=Math.sign(dx);
   [dx,dy]=unit(dx,dy);
+  const fromX=player.x,fromY=player.y;
   const movement=player.speed*(210/baseStats.speed)*dt;
   player.x=clamp(player.x+dx*movement,20,mapWidth-20);
   player.y=clamp(player.y+dy*movement,45,mapHeight-25);
@@ -1069,7 +1179,7 @@ function update(dt){
     trailTimer=.035;
   }
   wheelTrail=wheelTrail.filter(flame=>(flame.life-=dt)>0);
-  updateIngotHealing(dt);
+  updateIngots(dt,enemies);
   player.wheelTimer-=dt;
   for(const enemy of enemies){
     if(enemy.hp<=0)continue;
@@ -1078,19 +1188,20 @@ function update(dt){
       enemy.wheelReadyAt=elapsed+wheelCooldown;
       damage(enemy,player.wheelDamage);player.wheelTimer=wheelCooldown;
       if(elapsed>=player.attackUntil+.14)poseForAttack(enemy);
-      if(player.evolved[1]){
+      if(player.evolved[1]&&enemy.hp>0&&elapsed>=(enemy.wheelKnockbackReadyAt??0)){
         const [kx,ky]=unit(enemy.x-player.x,enemy.y-player.y);
         const force=enemy.name?24:55;
         enemy.x=clamp(enemy.x+kx*force,15,mapWidth-15);
         enemy.y=clamp(enemy.y+ky*force,15,mapHeight-15);
         enemy.knockedBackAt=elapsed;
+        enemy.wheelKnockbackReadyAt=elapsed+wheelKnockbackCooldown;
       }
     }
     if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed)continue;
     const gap=distance(player,enemy);
-    if(enemy.kind==='healer'||enemy.kind==='caster')useEnemyAbility(enemy,enemies,gap);
+    if(enemy.kind==='healer')healEnemyAllies(enemy,enemies);
     const followRange=enemy.kind==='caster'?175:enemy.kind==='healer'?100:enemy.r+12;
-    if(gap>followRange&&elapsed>=(enemy.castingUntil??0)){
+    if(gap>followRange&&!enemy.aim){
       const [mx,my]=unit(player.x-enemy.x,player.y-enemy.y);
       enemy.x+=mx*enemy.speed*dt;enemy.y+=my*enemy.speed*dt;
       if(Math.abs(mx)>.08)enemy.facing=Math.sign(mx);
@@ -1106,6 +1217,7 @@ function update(dt){
       enemy.nextContactHitAt=elapsed+contactHitInterval;
     }
   }
+  updateEnemyRanged(dt,fromX,fromY);
   if(boss&&boss.hp>0&&boss.stun<=0){
     boss.cast-=dt;
     if(boss.cast<=0){
@@ -1297,7 +1409,7 @@ function paintEnemy(target,kind,frame,color){
 const enemyColors={shade:'#e1ded0',runner:'#f09273',guard:'#718d9f',healer:'#82cb9f',caster:'#af9fdb'};
 function ghost(enemy){
   const kind=enemy===boss?(enemy.at===480||enemy.spread?'dragon':'boss'):enemy.mini?'mini':enemy.kind??'shade';
-  const casting=enemy.castingUntil>elapsed||(enemy===boss&&enemy.cast<.28);
+  const casting=Boolean(enemy.aim)||(enemy===boss&&enemy.cast<.28);
   const frame=casting?1:Math.floor(elapsed*7+(enemy.phase??0))%2;
   const y=Math.round(enemy.y)+(enemy.stun>0?0:frame*3);
   const color=enemy.flash>0?'#fff4bd':enemy.color??enemyColors[kind];
@@ -1378,8 +1490,14 @@ function drawMagnetPull(){
   }
   ctx.restore();
 }
-function drawQiBolt(bolt){
+function drawTargetedBolt(bolt){
   ctx.save();ctx.translate(bolt.x,bolt.y);ctx.rotate(bolt.angle);
+  if(bolt.basePower!==null){
+    pixel(ctx,'#ffd16890',-17,-2,15,4);
+    circle(0,0,6,'#ffc354','#754637',2);
+    pixel(ctx,'#fff3b4',-2,-2,4,4);
+    ctx.restore();return;
+  }
   pixel(ctx,'#77e9bc78',-24,-2,18,4);
   ctx.beginPath();ctx.moveTo(-7,-12);ctx.quadraticCurveTo(28,0,-7,12);
   ctx.quadraticCurveTo(12,0,-7,-12);ctx.closePath();
@@ -1387,22 +1505,44 @@ function drawQiBolt(bolt){
   pixel(ctx,'#e9fff2',7,-2,7,4);
   ctx.restore();
 }
+function drawGroundWarning(x,y,r,charge,seal=false){
+  circle(x,y,r,'#ec655647','#ffb082',2);
+  if(charge>0)circle(x,y,r*Math.sqrt(charge),'#ff885b55');
+  if(seal){
+    pixel(ctx,'#ffd18b',x-2,y-8,4,16);
+    pixel(ctx,'#ffd18b',x-8,y-2,16,4);
+  }
+}
+function drawEnemyAim(enemy){
+  const aim=enemy.aim;
+  const {profile}=aim;
+  const charge=clamp(1-(aim.firesAt-elapsed)/profile.windup,0,1);
+  if(profile.seal){drawGroundWarning(aim.x,aim.y,profile.radius,charge,true);return;}
+  const reach=profile.range+24+Math.min(12,enemy.r);
+  ctx.save();ctx.globalAlpha=.55+.4*charge;ctx.strokeStyle='#ffb38e';ctx.lineWidth=2;
+  ctx.setLineDash([8,6]);
+  ctx.beginPath();ctx.moveTo(enemy.x,enemy.y);
+  ctx.lineTo(enemy.x+aim.dx*reach,enemy.y+aim.dy*reach);ctx.stroke();
+  ctx.restore();
+}
+function drawEnemyShot(shot){
+  const tail=shot.radius*2;
+  circle(shot.x-shot.dx*tail,shot.y-shot.dy*tail,shot.radius*.65,'#ec6640ab');
+  circle(shot.x,shot.y,shot.radius,'#ff8e66','#4d2d31',2);
+  circle(shot.x,shot.y,shot.radius*.46,'#fff2bb');
+}
 function draw(){
   ctx.save();ctx.translate(-camera.x,-camera.y);
   background();
   for(const mark of warnings){
     const charge=clamp(1-mark.life/mark.duration,0,1);
-    circle(mark.x,mark.y,mark.r,'#ec655647','#ffb082',2);
-    if(charge>0)circle(mark.x,mark.y,mark.r*Math.sqrt(charge),'#ff885b55');
-    if(mark.kind==='seal'){
-      pixel(ctx,'#ffd18b',mark.x-2,mark.y-8,4,16);
-      pixel(ctx,'#ffd18b',mark.x-8,mark.y-2,16,4);
-    }
+    drawGroundWarning(mark.x,mark.y,mark.r,charge);
   }
+  for(const mob of mobs)if(mob.aim)drawEnemyAim(mob);
   for(const star of stars)drawXpGem(star.x,star.y);
   for(const drop of drops)drawLootDrop(drop.x,drop.y,drop.kind);
   for(const ingot of ingots){
-    circle(ingot.x,ingot.y,ingotRadius,'#ffe59225','#ffdb7a90',2);
+    circle(ingot.x,ingot.y,22,'#ffe59225','#ffdb7a90',2);
     drawIngot(ingot.x,ingot.y);
   }
   for(const mob of mobs){
@@ -1410,7 +1550,7 @@ function draw(){
     ghost(mob);
   }
   if(boss)ghost(boss);
-  for(const bolt of qiBolts)drawQiBolt(bolt);
+  for(const bolt of targetedBolts)drawTargetedBolt(bolt);
   for(const shot of shots)if(shot.lag<=0){
     if(shot.fire){
       for(let i=4;i>0;i--){
@@ -1444,6 +1584,7 @@ function draw(){
     ctx.fillRect(x-12,y-8,24,14);ctx.strokeRect(x-12,y-8,24,14);
   }
   drawMagnetPull();
+  for(const shot of enemyShots)drawEnemyShot(shot);
   const {x,y}=player;
   pixel(ctx,'#18292e88',Math.round(x)-12,Math.round(y)+3,24,7);
   const flying=player.moving&&mode==='play';
@@ -1461,6 +1602,12 @@ function draw(){
       const y=spark.y-30-(bossXPNoticeTime-spark.life)*26;
       const label='+'+spark.value+' XP';
       ctx.strokeText(label,spark.x,y);ctx.fillText(label,spark.x,y);ctx.restore();
+    }else if(spark.kind==='ring-burst'){
+      const fade=spark.life/ringExplosionLife;
+      ctx.save();ctx.globalAlpha=fade;
+      circle(spark.x,spark.y,spark.r,'#f57a4d22','#ffe19a',2);
+      starShape(spark.x,spark.y,Math.min(28,spark.r*.52)*(1+(1-fade)*.25),'#ffb96f');
+      ctx.restore();
     }else if(spark.kind==='bomb'){
       const fade=spark.life/bombFlashTime;
       ctx.save();ctx.globalAlpha=fade;
