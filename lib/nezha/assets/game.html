@@ -124,8 +124,7 @@ const wheelEvolutionScale = Math.SQRT2;
 const maxWheels = 8;
 const tileWidth = 48;
 const pickupRadius = 2 * tileWidth;
-const bombRadius = 2.5 * tileWidth;
-const bombDamage = 40;
+const bombKillLimit = 20;
 const bombFlashTime = .4;
 const magnetFlightTime = .9;
 const magnetPulseTime = .55;
@@ -766,7 +765,7 @@ function heal(fraction){
 function dropLoot(enemy,value){
   if(Math.random()<.60||kills<=5||enemy.mini||enemy===boss)stars.push({x:enemy.x,y:enemy.y,value});
   const roll=Math.random();
-  const kind=roll<.075?'heal':roll<.10?'magnet':roll<.25?'bomb':null;
+  const kind=roll<.075?'heal':roll<.10?'magnet':roll<.15?'bomb':null;
   if(kind)drops.push({x:enemy.x+20,y:enemy.y,kind});
 }
 function useEnemyAbility(enemy,allies,gap){
@@ -795,42 +794,68 @@ function attract(item,dt,radius,speed){
   item.y+=(player.y-item.y)*step/gap;
 }
 function activateMagnet(){
-  const magnetDrops=drops.filter(drop=>drop.kind!=='bomb');
   const flights=[];
-  const stride=Math.max(1,Math.ceil((stars.length+magnetDrops.length)/maxMagnetFlights));
-  let index=0,visualTime=magnetPulseTime;
+  const stride=Math.max(1,Math.ceil((stars.length+drops.length)/maxMagnetFlights));
+  let index=0,visualTime=magnetPulseTime,bombCount=0,bombArrival=0;
   function launch(item,kind){
-    if(index++%stride)return;
+    const visible=index++%stride===0;
+    if(!visible&&kind!=='bomb')return;
     const duration=.35+(magnetFlightTime-.35)*Math.min(distance(item,player)/1200,1);
+    if(kind==='bomb'){
+      bombCount++;
+      bombArrival=Math.max(bombArrival,duration);
+    }
+    if(!visible)return;
     visualTime=Math.max(visualTime,duration);
     flights.push({x:item.x,y:item.y,kind,startedAt:elapsed,duration});
   }
   for(const star of stars){launch(star,'xp');player.xp+=star.value;}
-  for(const drop of magnetDrops){launch(drop,drop.kind);if(drop.kind==='heal')heal(.10);}
-  stars=[];drops=drops.filter(drop=>drop.kind==='bomb');
+  for(const drop of drops){launch(drop,drop.kind);if(drop.kind==='heal')heal(.10);}
+  stars=[];drops=[];
   // Keep the reward window bounded even when multiple magnets are picked up in quick succession.
   const previous=magnetEffect;
-  magnetEffect={startedAt:elapsed,rewardAt:previous?.rewardAt??elapsed+visualTime,
+  const bombBursts=previous?.bombBursts??[];
+  if(bombCount)bombBursts.push({at:elapsed+bombArrival,count:bombCount});
+  magnetEffect={startedAt:elapsed,rewardAt:previous?.rewardAt??elapsed+Math.max(visualTime,bombArrival),bombBursts,
     flights:[...(previous?.flights??[]),...flights].slice(-maxMagnetFlights)};
 }
-function collectBomb(){
-  for(const enemy of mobs){
-    if(enemy.hp>0&&distance(enemy,player)<=bombRadius)damage(enemy,bombDamage);
+function detonateBombs(count=1){
+  const targets=mobs.filter(mob=>mob.hp>0);
+  const limit=Math.min(targets.length,bombKillLimit*count);
+  // Sample without replacement, then let the regular kill loop handle credits and loot.
+  for(let i=0;i<limit;i++){
+    const j=i+Math.floor(Math.random()*(targets.length-i));
+    const target=targets[j];
+    targets[j]=targets[i];
+    target.hp=0;
+    sparks.push({x:target.x,y:target.y,life:.28,r:8});
   }
-  if(boss?.hp>0&&distance(boss,player)<=bombRadius)damage(boss,bombDamage);
-  sparks.push({x:player.x,y:player.y,r:bombRadius,life:bombFlashTime,kind:'bomb'});
+  sparks.push({x:player.x,y:player.y,life:bombFlashTime,kind:'bomb'});
+}
+function updateMagnet(finish=false){
+  if(!magnetEffect)return;
+  let bombs=0;
+  if(magnetEffect.bombBursts.length){
+    magnetEffect.bombBursts=magnetEffect.bombBursts.filter(burst=>{
+      if(!finish&&elapsed<burst.at)return true;
+      bombs+=burst.count;
+      return false;
+    });
+  }
+  if(bombs)detonateBombs(bombs);
+  if(!magnetEffect.bombBursts.length&&elapsed-magnetEffect.startedAt>=magnetFlightTime)magnetEffect=null;
 }
 function collectLoot(dt){
-  if(magnetEffect&&elapsed-magnetEffect.startedAt>=magnetFlightTime)magnetEffect=null;
-  let magnetCollected=false;
+  let magnetCollected=false,bombs=0;
   drops=drops.filter(drop=>{
     attract(drop,dt,pickupRadius,240);
     if(distance(drop,player)>=25)return true;
     if(drop.kind==='magnet')magnetCollected=true;
     else if(drop.kind==='heal')heal(.10);
-    else if(drop.kind==='bomb')collectBomb();
+    else if(drop.kind==='bomb')bombs++;
     return false;
   });
+  if(bombs)detonateBombs(bombs);
   if(magnetCollected){
     activateMagnet();
     return;
@@ -973,6 +998,11 @@ function update(dt){
     sparks.push({x:mark.x,y:mark.y,life:.32,r:mark.r});
     return false;
   });
+  if(player.hp>0){
+    updateMagnet();
+    collectLoot(dt);
+    if(boss?.hp<=0&&(towerFloor||nextBoss===bossStages.length))updateMagnet(true);
+  }
   let smallKills=0;
   mobs=mobs.filter(mob=>{
     if(mob.hp>0)return true;
@@ -998,7 +1028,6 @@ function update(dt){
     boss=null;
   }
   if(towerFloor&&!boss&&floorKills>=towerGoal)spawnTowerGuardian();
-  collectLoot(dt);
   sparks=sparks.filter(s=>(s.life-=dt)>0);
   if(elapsed<nextRewardAt||(magnetEffect&&elapsed<magnetEffect.rewardAt))return;
   const requiredXP=needed();
@@ -1226,7 +1255,7 @@ function drawMagnetPull(){
     const tail=(1-Math.max(0,t-.075))**2;
     ctx.globalAlpha=(1-t*.55)*.75;
     ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(player.x+dx*tail,player.y+dy*tail);
-    ctx.strokeStyle=item.kind==='xp'?'#ffdc88':item.kind==='heal'?'#ff97b0':'#71d8ff';
+    ctx.strokeStyle=item.kind==='xp'?'#ffdc88':item.kind==='heal'?'#ff97b0':item.kind==='bomb'?'#ffae68':'#71d8ff';
     ctx.lineWidth=item.kind==='xp'?3:5;ctx.stroke();
     ctx.globalAlpha=1-t*.55;
     if(item.kind==='xp')drawXpGem(x,y);
@@ -1317,8 +1346,8 @@ function draw(){
     if(spark.kind==='bomb'){
       const fade=spark.life/bombFlashTime;
       ctx.save();ctx.globalAlpha=fade;
-      circle(spark.x,spark.y,spark.r,'#f88d5128','#ffce7d',3);
-      circle(spark.x,spark.y,spark.r*(1-fade*.8),null,'#fff0a3',4);
+      starShape(spark.x,spark.y-6,16+23*(1-fade),'#ffb563');
+      starShape(spark.x,spark.y-6,7+10*(1-fade),'#fff0a3');
       ctx.restore();
     }else if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);
     else starShape(spark.x,spark.y,8+spark.life*35,'#fff1bf');
