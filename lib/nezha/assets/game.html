@@ -338,7 +338,7 @@ function reset(){
     skillLevels:[0,0,0], skillRoutes:[null,null,null], skillTome:false, evolved:[false,false,false], gear:[0,0,0,0],
     deathCause:null,
     moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1,attackAt:-1,
-    jigong:jigongSpecs.map(spec=>({count:spec.count,power:spec.power,cooldown:spec.cooldown,timer:0,castAt:null}))};
+    jigong:jigongSpecs.map(spec=>({count:spec.count,damageUpgrades:0,cooldown:spec.cooldown,timer:0,castAt:null}))};
   mobs=[]; stars=[]; sparks=[]; targetedBolts=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
   enemyShots=[];nextEnemyAimAt=0;
   magnetEffect=null;
@@ -537,7 +537,7 @@ function wheelSweepsEnemy(enemy,start,sweep,hitRadius){
 }
 const challengeTime=()=>time+towerTime;
 function skillAttackGrowth(){
-  if(player.character==='jigong')return Math.max(1,...player.jigong.map((skill,index)=>player.skillLevels[index]?skill.power/jigongSpecs[index].power:1));
+  if(player.character==='jigong')return Math.max(1,...player.jigong.map((skill,index)=>player.skillLevels[index]?jigongBalancePower(index,skill)/jigongSpecs[index].balancePower:1));
   let skillGrowth=1;
   if(player.rings)skillGrowth=Math.max(skillGrowth,player.ringDamage/baseStats.attack*(player.evolved[0]?1.5:1));
   if(player.wheels)skillGrowth=Math.max(skillGrowth,player.wheelDamage/15);
@@ -554,7 +554,7 @@ function currentEnemyBalance(){
   const wheelSweep=player.wheels*player.wheelDamage;
   const brickVolley=player.bricks*player.brickDamage;
   const jigongVolley=player.character==='jigong'
-    ?player.jigong.reduce((total,skill,index)=>total+(player.skillLevels[index]?Math.min(3,skill.count)*skill.power:0),0):0;
+    ?player.jigong.reduce((total,skill,index)=>total+(player.skillLevels[index]?Math.min(3,skill.count)*jigongBalancePower(index,skill):0),0):0;
   return {
     time:challengeTime(),
     attackGrowth:referenceAttack/baseStats.attack*skillAttackGrowth(),
@@ -731,16 +731,21 @@ const skillUpgradeRoutes=[
   ]
 ];
 const jigongSpecs=[
-  {name:'開道鞋',label:'開道鞋・八方貫穿',count:8,step:2,max:20,power:14,gain:4,cooldown:3.2,min:1.15,speed:390,life:1.15,r:8},
-  {name:'葫蘆寶',label:'葫蘆寶・環射水花',count:4,step:4,max:16,power:18,gain:5,cooldown:4,min:1.35,speed:345,life:1.10,r:11},
-  {name:'清新扇',label:'清新扇・迴旋龍捲風',count:3,step:2,max:25,power:15,gain:4,cooldown:5.2,min:1.65,speed:205,life:1.55,r:13}
+  {name:'開道鞋',label:'開道鞋・八方貫穿',count:8,step:2,max:20,power:22,gain:6,balancePower:14,balanceGain:4,cooldown:3.2,min:1.15,speed:390,life:1.15,r:12},
+  {name:'葫蘆寶',label:'葫蘆寶・環射水花',count:4,step:4,max:16,power:24,gain:7,balancePower:18,balanceGain:5,cooldown:4,min:1.35,speed:345,life:1.10,r:11},
+  {name:'清新扇',label:'清新扇・迴旋龍捲風',count:3,step:2,max:25,power:21,gain:6,balancePower:15,balanceGain:4,cooldown:5.2,min:1.65,speed:205,life:1.55,r:13}
 ];
+// Use the pre-buff damage curve for enemy scaling, not the damage dealt in combat.
+function jigongBalancePower(index,skill){
+  const spec=jigongSpecs[index];
+  return spec.balancePower+skill.damageUpgrades*spec.balanceGain;
+}
 const jigongUnlocks=jigongSpecs.map(spec=>[spec.label,()=>{}]);
 const jigongNames=jigongSpecs.map(spec=>spec.name);
 const jigongRoutes=jigongSpecs.map((spec,index)=>{
   const state=()=>player.jigong[index];
   return [
-    {key:'damage',label:'傷害＋'+spec.gain,apply:()=>state().power+=spec.gain},
+    {key:'damage',label:'傷害＋'+spec.gain,apply:()=>state().damageUpgrades++},
     {key:'count',label:(index===1?'發射方位':'數量')+'＋'+spec.step,available:()=>state().count<spec.max,apply:()=>state().count=Math.min(spec.max,state().count+spec.step)},
     {key:'cooldown',label:'冷卻時間－10%',available:()=>state().cooldown>spec.min,apply:()=>state().cooldown=Math.max(spec.min,Math.round(state().cooldown*.9*100)/100)}
   ];
@@ -1322,15 +1327,16 @@ function explodeRingHit(center,value,enemies){
 }
 function launchJigongVolley(index,skill){
   const spec=jigongSpecs[index],hits=new Map();
+  const power=spec.power+skill.damageUpgrades*spec.gain;
   const evolved=player.evolved[index];
   const returnHits=index===0&&evolved?new Set():null;
-  const windCast=index===2&&evolved?{eyes:[],power:skill.power*jigongWindPower,pulses:0}:null;
+  const windCast=index===2&&evolved?{eyes:[],power:power*jigongWindPower,pulses:0}:null;
   const eyeCount=windCast?Math.min(jigongMaxEyes,skill.count):0;
   const eyeShots=new Set(Array.from({length:eyeCount},(_,i)=>Math.floor(i*skill.count/eyeCount)));
   for(let i=0;i<skill.count;i++){
     const angle=index===0?(i%8)*Math.PI/4+(i>=16?-Math.PI/16:i>=8?Math.PI/16:0):i*2*Math.PI/skill.count;
     const x=player.x+Math.cos(angle)*18,y=player.y+Math.sin(angle)*18;
-    jigongShots.push({index,x,y,originX:player.x,originY:player.y,angle,phase:angle,age:0,life:spec.life,speed:spec.speed,r:spec.r,power:skill.power,
+    jigongShots.push({index,x,y,originX:player.x,originY:player.y,angle,phase:angle,age:0,life:spec.life,speed:spec.speed,r:spec.r,power,
       seen:new Set(),hits,evolved,returnHits,returning:false,windCast:eyeShots.has(i)?windCast:null});
   }
 }
@@ -2139,6 +2145,8 @@ function drawJigongShot(shot){
   ctx.save();ctx.translate(x,y);
   if(index===0){
     ctx.rotate(angle);
+    const scale=shot.r/8;
+    ctx.scale(scale,scale);
     pixel(ctx,'#382820',-11,-5,18,9);pixel(ctx,shot.evolved?'#d5924c':'#a77a49',-9,-4,14,6);
     pixel(ctx,'#e0bb71',-5,-4,5,5);pixel(ctx,'#ffe0a0',5,-3,4,5);pixel(ctx,'#795237',-10,4,20,3);
     if(shot.returning)pixel(ctx,'#fff0b6',-18,-1,8,3);
@@ -2345,6 +2353,12 @@ function setProgress(element,value,max=1){
   if(element.value!==next||!element.hasAttribute('value'))element.value=next;
 }
 const updateHistory=[
+  {date:'2026-11-23',title:'濟公禪師法寶傷害調整',changes:[
+    ['開道鞋・八方神行鞋','基礎傷害由 14 提高至 22，每次傷害強化由＋4 提高至＋6。拖鞋外觀與命中半徑放大 50%，折返傷害仍為強化後傷害的 40%。'],
+    ['葫蘆寶・甘露乾坤葫','基礎傷害由 18 提高至 24，每次傷害強化由＋5 提高至＋7。減速效果與間隔不變。'],
+    ['清新扇・伏魔回風扇','基礎傷害由 15 提高至 21，每次傷害強化由＋4 提高至＋6。風眼仍按清新扇傷害的 25% 計算，重疊不疊傷。'],
+    ['平衡','怪物血量成長、法寶冷卻和數量上限不變；三太子不受影響。']
+  ]},
   {date:'2026-11-22',title:'濟公禪師法寶進化',changes:[
     ['八方神行鞋','開道鞋 10 級並取得神馬後進化。鞋子飛出後沿原路折返，回程造成 40% 傷害；同一波每隻怪最多承受一次折返命中。'],
     ['甘露乾坤葫','葫蘆寶 10 級並取得大魂丹後進化。水花讓一般怪物減速 20%，魔王減速 10%，持續 1.2 秒；同一目標每 2 秒最多觸發一次。'],
