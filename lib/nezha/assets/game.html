@@ -38,9 +38,10 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 .card p{line-height:1.5;margin:7px 0 12px;font-size:14px;color:#e3e7d8}
 .card .portrait{width:96px;height:96px;margin:auto}
 .actions{display:grid;gap:7px}.actions button{width:100%;text-align:left;padding:7px 10px}
-.skills{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.skills{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .skill{min-width:0;background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--red);padding:6px 8px}
-.skill:nth-child(2){border-top-color:var(--gold)}.skill:nth-child(3){border-top-color:var(--mint)}
+.skill:first-child{border-top-color:#71d8ff}.skill:nth-child(3){border-top-color:var(--gold)}.skill:nth-child(4){border-top-color:var(--mint)}
+.skill:first-child progress{--fill:#71d8ff}
 .skill strong,.skill small{display:block;line-height:1.25;overflow-wrap:anywhere}
 .skill strong{font-size:14px}.skill small{margin-top:2px;color:var(--muted);font-size:12px}
 .skill progress{display:block;width:100%;height:4px;margin-top:4px}
@@ -61,6 +62,9 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
   .card{padding:13px}.card h1{font-size:23px}.skill{padding:4px}.skill strong{font-size:12px}
   .hint .controls{display:none}
 }
+@media(max-width:420px){
+  .skills{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+}
 @media(max-height:470px){
   main{padding-block:5px;gap:4px}
   .card{padding:10px}.card h1{font-size:21px;margin:2px 0 5px}
@@ -80,7 +84,8 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 <progress id="xp" aria-label="升級進度"></progress>
 <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
 </div>
-<section class="skills" aria-label="法寶與冷卻時間">
+<section class="skills" aria-label="氣功、法寶與冷卻時間">
+<div class="skill"><strong></strong><small></small><progress max="1" aria-label="基礎氣功冷卻"></progress></div>
 <div class="skill"><strong></strong><small></small><progress max="1" aria-label="乾坤圈冷卻"></progress></div>
 <div class="skill"><strong></strong><small></small><progress max="1" aria-label="風火輪冷卻"></progress></div>
 <div class="skill"><strong></strong><small></small><progress max="1" aria-label="金磚冷卻"></progress></div>
@@ -117,7 +122,14 @@ const wheelOrbitRadius = 96;
 const wheelHitRadius = 23;
 const wheelEvolutionScale = Math.SQRT2;
 const maxWheels = 8;
-const pickupRadius = 2 * 48;
+const tileWidth = 48;
+const pickupRadius = 2 * tileWidth;
+const bombRadius = 2.5 * tileWidth;
+const bombDamage = 40;
+const bombFlashTime = .4;
+const magnetFlightTime = .9;
+const magnetPulseTime = .55;
+const maxMagnetFlights = 180;
 const bossStages = [
   {at:120,name:'超級大幽靈',hp:210,attack:22,speed:70,r:35,color:'#e9d8ff',interval:3.5},
   {at:300,name:'重甲幽靈',hp:465,attack:32,speed:59,r:42,color:'#b8b0ee',interval:2.8},
@@ -126,6 +138,12 @@ const bossStages = [
 const maxMoveSpeed=100;
 const maxHealth=2000;
 const maxUpgradeLevel=25;
+const statGainPerLevel=.5;
+const baseQi={damage:14,cooldown:1.05,targets:1};
+const qiRange=360;
+const qiSpeed=680;
+const qiMinCooldown=.35;
+const qiMaxTargets=5;
 const towerBaselineFloor=4;
 const towerFloorGrowth=1.15;
 const baseStats={hp:100,attack:25,defense:25,speed:45};
@@ -153,7 +171,8 @@ let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline;
 let optionButtons=[];
 const miniBossChance=.30;
 let nextWave, waveSlots, miniBossKills, miniBossThreshold, gearRewards, nextRewardAt;
-let boss, nextBoss, elapsed, shots, bricks, warnings, drops, ingots, wheelTrail, trailTimer;
+let boss, nextBoss, elapsed, qiBolts, shots, bricks, warnings, drops, ingots, wheelTrail, trailTimer;
+let magnetEffect;
 let camera = {x:0,y:0};
 let width, height, player, mobs, stars, sparks, time, spawn, kills, mode;
 let stick = null;
@@ -176,12 +195,14 @@ function trackCamera(){
 }
 function reset(){
   player = {x:mapWidth/2,y:mapHeight/2,hp:baseStats.hp,maxHp:baseStats.hp,defense:baseStats.defense,attack:baseStats.attack,speed:baseStats.speed,
+    qi:{...baseQi,level:1,timer:0},
     xp:0,level:1,rings:0,ringDamage:baseStats.attack,pattern:0,wheels:0,wheelDamage:15,
     wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
     skillLevels:[0,0,0], evolved:[false,false,false], gear:[0,0,0,0],
     healTimer:0,
     moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1};
-  mobs=[]; stars=[]; sparks=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
+  mobs=[]; stars=[]; sparks=[]; qiBolts=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
+  magnetEffect=null;
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
   towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
   towerBaseline=null;
@@ -210,13 +231,15 @@ function panel(title,desc,choices,portrait=false){
   optionButtons=choices.map(([label,action],index)=>{
     const button=document.createElement('button');
     button.textContent=(index+1)+'　'+label;
-    button.addEventListener('click',action); actions.append(button);
+    button.disabled=!action;
+    if(action)button.addEventListener('click',action);
+    actions.append(button);
     return button;
   });
   card.append(h,p,actions);
-  if(mode!=='ready') actions.firstChild.focus({preventScroll:true});
+  if(mode!=='ready') actions.querySelector('button:enabled')?.focus({preventScroll:true});
 }
-function start(){reset(); showUpgrades(true);}
+function start(){reset();setMode('play');}
 function showStart(){
   setMode('ready');
   panel('神明Q仙傳','探索廟埕、擊退小幽靈，在第 2、5、8 分鐘迎戰魔王。擊倒超級龍王後，帶著法寶進入無限塔。',[['開始守廟埕',start],['無限塔排行榜',()=>showLeaderboard(showStart)]],true);
@@ -416,38 +439,41 @@ const unlocks=[
   ['超級風火輪・繞身旋轉',()=>{player.wheels=1;player.skillLevels[1]=1;setMode('play');}],
   ['超級金磚・範圍攻擊與暈眩',()=>{player.bricks=1;player.skillLevels[2]=1;setMode('play');}]
 ];
-function availableGearUpgrades(){
+function availableGearUpgrades(includeMaxed=false){
   const options=[];
   function add(index,label,apply){
     const level=player.gear[index];
-    if(level<maxUpgradeLevel)options.push([gearNames[index]+' Lv.'+(level+1)+'・'+label,()=>{
+    if(level<maxUpgradeLevel&&apply)options.push([gearNames[index]+' Lv.'+(level+1)+'・'+label,()=>{
       player.gear[index]++;
       apply();
     }]);
+    else if(includeMaxed)options.push([gearNames[index]+'・已達上限',null]);
   }
   add(3,'攻擊力＋4',()=>player.attack+=4);
   add(1,'防禦力＋9',()=>player.defense+=9);
   const speedGain=Math.min(4,maxMoveSpeed-player.speed);
-  if(speedGain>0)add(2,'移動速度＋'+speedGain,()=>player.speed+=speedGain);
+  add(2,'移動速度＋'+speedGain,speedGain>0?()=>player.speed+=speedGain:null);
   // The 25 health upgrades add up to 1,900 HP.
   const healthGain=Math.min(28+4*player.gear[0],maxHealth-player.maxHp);
-  if(healthGain>0)add(0,'最大與目前血量＋'+healthGain,()=>{
+  add(0,'最大與目前血量＋'+healthGain,healthGain>0?()=>{
     player.maxHp+=healthGain;
     player.hp=Math.min(player.maxHp,player.hp+healthGain);
-  });
+  }:null);
   return options;
 }
+function chooseGear(apply){
+  if(!apply)return null;
+  return ()=>{apply();applyEvolutions();setMode('play');};
+}
 function showGearReward(){
-  const upgrades=availableGearUpgrades();
-  if(!upgrades.length){gearRewards=0;return false;}
+  const upgrades=availableGearUpgrades(true);
+  if(!upgrades.some(([,apply])=>apply)){gearRewards=0;return false;}
   gearRewards--;
   setMode('upgrade');
-  panel('小魔王戰利品','選一件道具強化三太子。',upgrades.map(([label,apply])=>[label,()=>{
-    apply();applyEvolutions();setMode('play');
-  }]));
+  panel('小魔王戰利品','選一件道具強化三太子。',upgrades.map(([label,apply])=>[label,chooseGear(apply)]));
   return true;
 }
-function showUpgrades(first=false){
+function showUpgrades(){
   const groups=new Map();
   function option(group,label,apply){
     if(!groups.has(group))groups.set(group,[]);
@@ -462,27 +488,35 @@ function showUpgrades(first=false){
       apply();player.skillLevels[index]++;applyEvolutions();setMode('play');
     });
   }
-  if(first){
-    unlocks.forEach(([label,apply],index)=>option(index,label,apply));
-  }else{
-    if(!player.rings)option(0,...unlocks[0]);
-    else {
-      if(player.rings<8)skill(0,'發射數量＋1',()=>player.rings++);
-      skill(0,'傷害＋7',()=>player.ringDamage+=7);
-    }
-    if(!player.wheels)option(1,...unlocks[1]);
-    else {
-      if(player.wheels<maxWheels)skill(1,'數量＋1',()=>player.wheels++);
-      skill(1,'傷害＋6',()=>player.wheelDamage+=6);
-      skill(1,'旋轉速度＋20%',()=>player.wheelSpeed*=1.2);
-    }
-    if(!player.bricks)option(2,...unlocks[2]);
-    else if(player.bricks<5)skill(2,'投擲數量＋1',()=>player.bricks++);
-    else skill(2,'傷害＋8',()=>player.brickDamage+=8);
-    availableGearUpgrades().forEach(([label,apply],index)=>option('gear'+index,label,()=>{
-      apply();applyEvolutions();setMode('play');
-    }));
+  if(!player.rings)option(0,...unlocks[0]);
+  else {
+    if(player.rings<8)skill(0,'發射數量＋1',()=>player.rings++);
+    skill(0,'傷害＋7',()=>player.ringDamage+=7);
   }
+  if(!player.wheels)option(1,...unlocks[1]);
+  else {
+    if(player.wheels<maxWheels)skill(1,'數量＋1',()=>player.wheels++);
+    skill(1,'傷害＋6',()=>player.wheelDamage+=6);
+    skill(1,'旋轉速度＋20%',()=>player.wheelSpeed*=1.2);
+  }
+  if(!player.bricks)option(2,...unlocks[2]);
+  else if(player.bricks<5)skill(2,'投擲數量＋1',()=>player.bricks++);
+  else skill(2,'傷害＋8',()=>player.brickDamage+=8);
+  const qi=player.qi;
+  if(qi.level<maxUpgradeLevel){
+    function upgradeQi(label,apply){
+      option('qi','基礎氣功 Lv.'+(qi.level+1)+'・'+label,()=>{
+        apply();qi.level++;setMode('play');
+      });
+    }
+    if(qi.cooldown>qiMinCooldown){
+      const nextCooldown=Math.max(qiMinCooldown,Math.round(qi.cooldown*.9*100)/100);
+      upgradeQi('攻速提升・間隔 '+nextCooldown.toFixed(2)+' 秒',()=>{qi.cooldown=nextCooldown;});
+    }
+    if(qi.targets<qiMaxTargets)upgradeQi('目標數＋1',()=>qi.targets++);
+    upgradeQi('氣功傷害＋3',()=>qi.damage+=3);
+  }
+  availableGearUpgrades().forEach(([label,apply],index)=>option('gear'+index,label,chooseGear(apply)));
   if(!groups.size)return;
   const available=[...groups.values()];
   const options=[];
@@ -491,8 +525,7 @@ function showUpgrades(first=false){
     options.push(choices[Math.floor(Math.random()*choices.length)]);
   }
   setMode('upgrade');
-  panel(first?'選一件起始法寶':'升到 '+player.level+' 級',
-    first?'走位交給你，法寶會自動攻擊。':'法寶 Lv.10 搭配對應道具即可進化。',options);
+  panel('升到 '+player.level+' 級','攻擊力＋'+statGainPerLevel+'、防禦力＋'+statGainPerLevel+'。法寶 Lv.10 搭配對應道具即可進化。',options);
 }
 async function accountRequest(path,data){
   const response=await fetch('/games/nezha/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
@@ -609,7 +642,8 @@ function enterFloor(){
   towerFloor++;floorKills=0;floorTime=0;spawn=.65;
   // Share one stat baseline so the 15% multiplier is the only growth from floor 5.
   if(towerFloor===towerBaselineFloor)towerBaseline=currentEnemyBalance();
-  boss=null;mobs=[];stars=[];drops=[];shots=[];bricks=[];warnings=[];ingots=[];sparks=[];wheelTrail=[];
+  boss=null;mobs=[];stars=[];drops=[];qiBolts=[];shots=[];bricks=[];warnings=[];ingots=[];sparks=[];wheelTrail=[];
+  magnetEffect=null;
   player.healTimer=0;
   player.x=mapWidth/2;player.y=mapHeight/2;
   heal(.25);
@@ -657,11 +691,22 @@ function poseForAttack(target){
   player.attackUntil=elapsed+.23;
 }
 function useSkills(dt,enemies){
+  const qi=player.qi;
+  qi.timer=Math.max(0,qi.timer-dt);
   player.ringTimer-=dt;player.brickTimer-=dt;
-  if((player.rings&&player.ringTimer<=0)||(player.bricks&&player.brickTimer<=0)){
+  if(qi.timer===0||(player.rings&&player.ringTimer<=0)||(player.bricks&&player.brickTimer<=0)){
     const targets=nearestTargets(enemies);
     const target=targets[0];
     const aim=target?Math.atan2(target.y-player.y,target.x-player.x):player.heading;
+    if(qi.timer===0&&target&&distance(target,player)<=qiRange){
+      poseForAttack(target);
+      for(const enemy of targets.slice(0,qi.targets)){
+        if(distance(enemy,player)>qiRange)break;
+        const angle=Math.atan2(enemy.y-player.y,enemy.x-player.x);
+        qiBolts.push({x:player.x,y:player.y,angle,target:enemy,value:qi.damage,life:1});
+      }
+      qi.timer=qi.cooldown;
+    }
     if(player.rings&&player.ringTimer<=0&&target){
       poseForAttack(target);
       for(let i=0;i<player.rings;i++){
@@ -682,6 +727,16 @@ function useSkills(dt,enemies){
       player.brickTimer=brickCooldown;
     }
   }
+  qiBolts=qiBolts.filter(bolt=>{
+    bolt.life-=dt;
+    if(bolt.life<=0||bolt.target.hp<=0)return false;
+    const gap=distance(bolt,bolt.target),step=qiSpeed*dt;
+    if(gap<=step+bolt.target.r){damage(bolt.target,bolt.value);return false;}
+    const dx=bolt.target.x-bolt.x,dy=bolt.target.y-bolt.y;
+    bolt.angle=Math.atan2(dy,dx);
+    bolt.x+=dx*step/gap;bolt.y+=dy*step/gap;
+    return true;
+  });
   shots=shots.filter(shot=>{
     shot.lag-=dt;
     if(shot.lag>0){shot.x=player.x;shot.y=player.y;return true;}
@@ -711,7 +766,7 @@ function heal(fraction){
 function dropLoot(enemy,value){
   if(Math.random()<.60||kills<=5||enemy.mini||enemy===boss)stars.push({x:enemy.x,y:enemy.y,value});
   const roll=Math.random();
-  const kind=roll<.075?'heal':roll<.10?'magnet':null;
+  const kind=roll<.075?'heal':roll<.10?'magnet':roll<.25?'bomb':null;
   if(kind)drops.push({x:enemy.x+20,y:enemy.y,kind});
 }
 function useEnemyAbility(enemy,allies,gap){
@@ -739,20 +794,45 @@ function attract(item,dt,radius,speed){
   item.x+=(player.x-item.x)*step/gap;
   item.y+=(player.y-item.y)*step/gap;
 }
+function activateMagnet(){
+  const magnetDrops=drops.filter(drop=>drop.kind!=='bomb');
+  const flights=[];
+  const stride=Math.max(1,Math.ceil((stars.length+magnetDrops.length)/maxMagnetFlights));
+  let index=0,visualTime=magnetPulseTime;
+  function launch(item,kind){
+    if(index++%stride)return;
+    const duration=.35+(magnetFlightTime-.35)*Math.min(distance(item,player)/1200,1);
+    visualTime=Math.max(visualTime,duration);
+    flights.push({x:item.x,y:item.y,kind,startedAt:elapsed,duration});
+  }
+  for(const star of stars){launch(star,'xp');player.xp+=star.value;}
+  for(const drop of magnetDrops){launch(drop,drop.kind);if(drop.kind==='heal')heal(.10);}
+  stars=[];drops=drops.filter(drop=>drop.kind==='bomb');
+  // Keep the reward window bounded even when multiple magnets are picked up in quick succession.
+  const previous=magnetEffect;
+  magnetEffect={startedAt:elapsed,rewardAt:previous?.rewardAt??elapsed+visualTime,
+    flights:[...(previous?.flights??[]),...flights].slice(-maxMagnetFlights)};
+}
+function collectBomb(){
+  for(const enemy of mobs){
+    if(enemy.hp>0&&distance(enemy,player)<=bombRadius)damage(enemy,bombDamage);
+  }
+  if(boss?.hp>0&&distance(boss,player)<=bombRadius)damage(boss,bombDamage);
+  sparks.push({x:player.x,y:player.y,r:bombRadius,life:bombFlashTime,kind:'bomb'});
+}
 function collectLoot(dt){
+  if(magnetEffect&&elapsed-magnetEffect.startedAt>=magnetFlightTime)magnetEffect=null;
   let magnetCollected=false;
   drops=drops.filter(drop=>{
     attract(drop,dt,pickupRadius,240);
     if(distance(drop,player)>=25)return true;
     if(drop.kind==='magnet')magnetCollected=true;
     else if(drop.kind==='heal')heal(.10);
+    else if(drop.kind==='bomb')collectBomb();
     return false;
   });
   if(magnetCollected){
-    for(const star of stars)player.xp+=star.value;
-    for(const drop of drops)if(drop.kind==='heal')heal(.10);
-    stars=[];drops=[];
-    sparks.push({x:player.x,y:player.y,life:.5,r:110});
+    activateMagnet();
     return;
   }
   stars=stars.filter(star=>{
@@ -920,13 +1000,15 @@ function update(dt){
   if(towerFloor&&!boss&&floorKills>=towerGoal)spawnTowerGuardian();
   collectLoot(dt);
   sparks=sparks.filter(s=>(s.life-=dt)>0);
-  if(elapsed<nextRewardAt)return;
+  if(elapsed<nextRewardAt||(magnetEffect&&elapsed<magnetEffect.rewardAt))return;
   const requiredXP=needed();
   if(gearRewards>0&&showGearReward()){
     nextRewardAt=elapsed+rewardInterval;
   }else if(player.xp>=requiredXP){
     player.xp-=requiredXP;
     player.level++;
+    player.attack+=statGainPerLevel;
+    player.defense+=statGainPerLevel;
     nextRewardAt=elapsed+rewardInterval;
     showUpgrades();
   }
@@ -1006,8 +1088,8 @@ function background(){
   const tiles=['#435c60','#486369','#40585d'];
   const stone=['#637775','#596e6c','#687975'];
   for(let row=Math.max(0,Math.floor(camera.y/32));row*32<=camera.y+height&&row*32<mapHeight;row++){
-    for(let col=Math.max(0,Math.floor(camera.x/48));col*48<=camera.x+width&&col*48<mapWidth;col++){
-      const x=col*48,y=row*32,seed=(row*17+col*13)%19;
+    for(let col=Math.max(0,Math.floor(camera.x/tileWidth));col*tileWidth<=camera.x+width&&col*tileWidth<mapWidth;col++){
+      const x=col*tileWidth,y=row*32,seed=(row*17+col*13)%19;
       const lane=Math.abs(x-mapWidth/2)<150||Math.abs(y-mapHeight/2)<104;
       block((lane?stone:tiles)[seed%3],x,y,46,30);
       block(lane?'#83918a':'#597378',x,y,46,2);
@@ -1106,6 +1188,61 @@ function drawIngot(x,y){
   ctx.lineWidth=2;ctx.strokeStyle='#754344';ctx.stroke();
   circle(x,y-3,7,'#ffe899','#a36646',1.5);
 }
+function drawXpGem(x,y){
+  pixel(ctx,'#625450',x-5,y-3,10,7);
+  pixel(ctx,'#ffcb65',x-3,y-5,6,10);
+  pixel(ctx,'#ffe5a0',x-1,y-4,2,5);
+}
+function drawLootDrop(x,y,kind){
+  if(kind==='bomb'){
+    circle(x,y,13,'#b45745','#382b39',3);
+    circle(x,y+1,6,'#29343f','#ffe0a1',1.5);
+    pixel(ctx,'#ffd47b',x+3,y-8,2,4);pixel(ctx,'#fff0aa',x+5,y-10,3,3);
+    return;
+  }
+  const isHeal=kind==='heal';
+  circle(x,y,13,isHeal?'#ef6d91':'#71d8ff','#3c2a54',3);
+  ctx.fillStyle='#251637';ctx.font='bold 15px system-ui';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(isHeal?'+':'磁',x,y);
+}
+function drawMagnetPull(){
+  if(!magnetEffect)return;
+  const age=elapsed-magnetEffect.startedAt;
+  ctx.save();
+  for(const delay of [0,.12]){
+    const t=(age-delay)/(magnetPulseTime-delay);
+    if(t<0||t>=1)continue;
+    ctx.globalAlpha=(1-t)*.85;
+    circle(player.x,player.y,24+142*t,null,'#71d8ff',4-2*t);
+  }
+  for(const item of magnetEffect.flights){
+    const t=(elapsed-item.startedAt)/item.duration;
+    if(t>=1)continue;
+    const remaining=(1-t)**2;
+    const dx=item.x-player.x,dy=item.y-player.y;
+    const x=player.x+dx*remaining,y=player.y+dy*remaining;
+    if(x<camera.x-24||x>camera.x+width+24||y<camera.y-24||y>camera.y+height+24)continue;
+    const tail=(1-Math.max(0,t-.075))**2;
+    ctx.globalAlpha=(1-t*.55)*.75;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(player.x+dx*tail,player.y+dy*tail);
+    ctx.strokeStyle=item.kind==='xp'?'#ffdc88':item.kind==='heal'?'#ff97b0':'#71d8ff';
+    ctx.lineWidth=item.kind==='xp'?3:5;ctx.stroke();
+    ctx.globalAlpha=1-t*.55;
+    if(item.kind==='xp')drawXpGem(x,y);
+    else drawLootDrop(x,y,item.kind);
+  }
+  ctx.restore();
+}
+function drawQiBolt(bolt){
+  ctx.save();ctx.translate(bolt.x,bolt.y);ctx.rotate(bolt.angle);
+  pixel(ctx,'#77e9bc78',-24,-2,18,4);
+  ctx.beginPath();ctx.moveTo(-7,-12);ctx.quadraticCurveTo(28,0,-7,12);
+  ctx.quadraticCurveTo(12,0,-7,-12);ctx.closePath();
+  ctx.fillStyle='#7af0c4';ctx.fill();ctx.strokeStyle='#236776';ctx.lineWidth=2;ctx.stroke();
+  pixel(ctx,'#e9fff2',7,-2,7,4);
+  ctx.restore();
+}
 function draw(){
   ctx.save();ctx.translate(-camera.x,-camera.y);
   background();
@@ -1118,18 +1255,8 @@ function draw(){
       pixel(ctx,'#ffd18b',mark.x-8,mark.y-2,16,4);
     }
   }
-  for(const star of stars){
-    pixel(ctx,'#625450',star.x-5,star.y-3,10,7);
-    pixel(ctx,'#ffcb65',star.x-3,star.y-5,6,10);
-    pixel(ctx,'#ffe5a0',star.x-1,star.y-4,2,5);
-  }
-  for(const drop of drops){
-    const isHeal=drop.kind==='heal';
-    circle(drop.x,drop.y,13,isHeal?'#ef6d91':'#71d8ff','#3c2a54',3);
-    ctx.fillStyle='#251637';ctx.font='bold 15px system-ui';
-    ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(isHeal?'+':'磁',drop.x,drop.y);
-  }
+  for(const star of stars)drawXpGem(star.x,star.y);
+  for(const drop of drops)drawLootDrop(drop.x,drop.y,drop.kind);
   for(const ingot of ingots){
     circle(ingot.x,ingot.y,ingotRadius,'#ffe59225','#ffdb7a90',2);
     drawIngot(ingot.x,ingot.y);
@@ -1139,6 +1266,7 @@ function draw(){
     ghost(mob);
   }
   if(boss)ghost(boss);
+  for(const bolt of qiBolts)drawQiBolt(bolt);
   for(const shot of shots)if(shot.lag<=0){
     if(shot.fire){
       for(let i=4;i>0;i--){
@@ -1171,6 +1299,7 @@ function draw(){
     ctx.fillStyle='#ffd169';ctx.strokeStyle='#8f5550';ctx.lineWidth=3;
     ctx.fillRect(x-12,y-8,24,14);ctx.strokeRect(x-12,y-8,24,14);
   }
+  drawMagnetPull();
   const {x,y}=player;
   pixel(ctx,'#18292e88',Math.round(x)-12,Math.round(y)+3,24,7);
   const flying=player.moving&&mode==='play';
@@ -1185,7 +1314,13 @@ function draw(){
     drawActorSprite(actor,x,y+7,2.5,player.facing<0);
   }
   for(const spark of sparks){
-    if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);
+    if(spark.kind==='bomb'){
+      const fade=spark.life/bombFlashTime;
+      ctx.save();ctx.globalAlpha=fade;
+      circle(spark.x,spark.y,spark.r,'#f88d5128','#ffce7d',3);
+      circle(spark.x,spark.y,spark.r*(1-fade*.8),null,'#fff0a3',4);
+      ctx.restore();
+    }else if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);
     else starShape(spark.x,spark.y,8+spark.life*35,'#fff1bf');
   }
   ctx.restore();
@@ -1207,7 +1342,7 @@ const xp=document.querySelector('#xp');
 const bossbar=document.querySelector('#bossbar');
 const bossname=document.querySelector('#bossname');
 const bossHP=document.querySelector('#bossHP');
-const skillSlots=[...document.querySelectorAll('.skill')].map(slot=>({
+const [qiSlot,...skillSlots]=[...document.querySelectorAll('.skill')].map(slot=>({
   name:slot.querySelector('strong'),status:slot.querySelector('small'),bar:slot.querySelector('progress')
 }));
 const gear=document.querySelector('#gear');
@@ -1232,6 +1367,10 @@ function drawWaveHud(){
   if(waveHud.textContent!==message)waveHud.textContent=message;
 }
 function drawSkillHud(){
+  const qi=player.qi;
+  qiSlot.name.textContent='基礎氣功';
+  qiSlot.status.textContent='Lv.'+qi.level+' · '+qi.timer.toFixed(2)+' 秒';
+  qiSlot.bar.value=clamp(1-qi.timer/qi.cooldown,0,1);
   const limits=[ringCooldown,wheelCooldown,brickCooldown];
   const cooldowns=[player.ringTimer,player.wheelTimer,player.brickTimer];
   skillSlots.forEach(({name,status,bar},index)=>{
