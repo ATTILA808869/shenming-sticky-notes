@@ -22,7 +22,8 @@ button:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid wh
 .account button{flex-shrink:0;padding:5px 9px}.account #nickname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 .field{position:relative;overflow:hidden;flex:1;min-height:0;border:2px solid #b78d59;border-radius:4px;background:#34454a;box-shadow:0 0 0 2px #0a151d}
 canvas{width:100%;height:100%;display:block;touch-action:none;image-rendering:pixelated}
-.field>canvas{position:absolute;inset:0}
+#arena{position:absolute;inset:0}
+#player-sprite{position:absolute;left:0;top:0;width:128px;height:128px;pointer-events:none}
 .hud{pointer-events:none;position:absolute;top:12px;inset-inline:12px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:start;gap:5px;font-weight:800}
 .hud span,.stats,.bossbar,.wave{background:#17252ff2;border:1px solid #9d8062;border-radius:2px}
 .hud span{padding:6px 10px;font-size:14px;white-space:nowrap}.hud #level{justify-self:end}
@@ -108,7 +109,8 @@ html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!importa
 <main>
 <header><div><a href="/" style="color:inherit"><small>神明便利貼</small></a><strong>神明Q仙傳</strong></div><div class="account"><span id="nickname"></span><button id="logout">登出</button><button id="pause" disabled>暫停</button></div></header>
 <div class="field">
-<canvas aria-label="廟埕遊戲區"></canvas>
+<canvas id="arena" aria-label="廟埕遊戲區"></canvas>
+<canvas id="player-sprite" aria-hidden="true"></canvas>
 <div class="hud"><dl class="stats" aria-label="三太子狀態">
 <dt>血量</dt><dd id="health"></dd><dt>攻擊力</dt><dd id="attack"></dd>
 <dt>防禦力</dt><dd id="defense"></dd><dt>移動速度</dt><dd id="moveSpeed"></dd></dl><span id="clock"></span><span id="level"></span></div>
@@ -127,8 +129,10 @@ html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!importa
 <footer class="hint"><span class="controls">WASD／方向鍵移動・數字鍵選擇</span><div class="xp-summary"><span id="score"></span><button id="spendXP" type="button" disabled>升級</button></div></footer>
 </main>
 <script>
-const canvas = document.querySelector('canvas');
+const canvas = document.querySelector('#arena');
 const ctx = canvas.getContext('2d');
+const playerSprite=document.querySelector('#player-sprite');
+const spriteCtx=playerSprite.getContext('2d');
 const overlay = document.querySelector('#overlay');
 const card = document.querySelector('#card');
 const pause = document.querySelector('#pause');
@@ -136,6 +140,8 @@ const heroSheet = new Image();
 const heroSheetUrl = '/games/nezha/nezha-sheet.png';
 let heroSheetFailed = false;
 const heroCellSize = 724;
+const heroWorldSize=78;
+let spriteDensity=0,spriteRasterKey='',spriteLeft,spriteTop;
 // Each body stays centered on the same point, including the wider attack pose.
 const heroPoses = {
   idle:{column:0,anchorX:319,anchorY:668},
@@ -143,6 +149,7 @@ const heroPoses = {
   attack:{column:2,anchorX:387,anchorY:663}
 };
 heroSheet.addEventListener('load',()=>{
+  spriteRasterKey='';
   if(mode==='ready')showStart();
   else {
     const portrait=card.querySelector('.portrait');
@@ -254,6 +261,14 @@ const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
 const unit = (x,y) => {const length = Math.hypot(x,y) || 1; return [x/length,y/length];};
 function resize(){
+  const density=Math.min(4,window.devicePixelRatio||1);
+  if(spriteDensity!==density){
+    spriteDensity=density;
+    const pixels=Math.max(1,Math.round(playerSprite.clientWidth*density));
+    playerSprite.width=playerSprite.height=pixels;
+    spriteRasterKey='';spriteLeft=spriteTop=undefined;
+    requestFrame();
+  }
   const nextWidth=canvas.clientWidth,nextHeight=canvas.clientHeight;
   if(!nextWidth||!nextHeight||(width===nextWidth&&height===nextHeight))return;
   width=nextWidth;height=nextHeight;
@@ -1515,6 +1530,27 @@ function drawHeroPortrait(canvas){
   drawHero(target,'idle',canvas.width/2,canvas.height-7,canvas.width*.95,-1);
   canvas.dataset.loaded='';
 }
+function drawPlayerSprite(pose,x,y,facing){
+  const {column,anchorX,anchorY}=heroPoses[pose];
+  const mirrored=facing>0;
+  const size=Math.max(1,Math.round(heroWorldSize*viewZoom*spriteDensity));
+  const key=column+':'+size+':'+Number(mirrored);
+  if(key!==spriteRasterKey){
+    spriteRasterKey=key;
+    spriteCtx.setTransform(1,0,0,1,0,0);
+    spriteCtx.clearRect(0,0,playerSprite.width,playerSprite.height);
+    spriteCtx.imageSmoothingEnabled=false;
+    if(mirrored)spriteCtx.setTransform(-1,0,0,1,size,0);
+    spriteCtx.drawImage(heroSheet,column*heroCellSize,0,heroCellSize,heroCellSize,0,0,size,size);
+  }
+  // Align both the sprite and its anchor to physical pixels, even at fractional zoom.
+  const left=Math.round((x-view.x)*viewZoom*spriteDensity)-Math.round((mirrored?heroCellSize-anchorX:anchorX)*size/heroCellSize);
+  const top=Math.round((y-view.y)*viewZoom*spriteDensity)-Math.round(anchorY*size/heroCellSize);
+  if(left!==spriteLeft||top!==spriteTop){
+    spriteLeft=left;spriteTop=top;
+    playerSprite.style.transform='translate('+left/spriteDensity+'px,'+top/spriteDensity+'px)';
+  }
+}
 const sprites=new Map();
 function sprite(key,w,h,paint){
   if(sprites.has(key))return sprites.get(key);
@@ -1798,7 +1834,7 @@ function draw(){
   if(heroSheet.naturalWidth){
     const pose=attacking?'attack':flying?'fly':'idle';
     const hover=attacking?0:Math.round(Math.sin(elapsed*(flying?15:5))*(flying?3:1));
-    drawHero(ctx,pose,x,y+7+hover,78,attacking?player.attackFacing:player.facing);
+    drawPlayerSprite(pose,x,y+7+hover,attacking?player.attackFacing:player.facing);
   }
   for(const spark of sparks){
     if(spark.kind==='boss-xp'){
@@ -1949,5 +1985,6 @@ document.querySelector('#logout').onclick=async()=>{
   catch(error){window.alert(error.message);}
 };
 new ResizeObserver(resize).observe(canvas);
+window.addEventListener('resize',resize);
 </script>
 </html>
