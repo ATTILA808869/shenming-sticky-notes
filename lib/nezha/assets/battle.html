@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>雙人守廟埕｜神明Q仙傳</title>
+<style>
+:root{color-scheme:dark;background:#111f25;color:#fff0d7;font:16px system-ui,sans-serif}*{box-sizing:border-box}
+body{margin:0}main{display:grid;grid-template-rows:auto auto minmax(0,1fr);min-height:320px;height:100dvh;padding:10px;gap:7px}
+header,#players{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px}h1{font-size:20px;margin:0;color:#ffd07a}
+a,button{font:inherit;color:#31211c;background:#ffd07a;border:1px solid #a86642;border-radius:4px;padding:5px 9px;text-decoration:none}
+#players{flex-wrap:nowrap;margin:0;padding:0;list-style:none;font-size:13px}
+#players li{border:1px solid #456060;border-radius:4px;padding:4px 7px;min-width:0;flex:1;overflow-wrap:anywhere}
+#players span{display:block;white-space:nowrap}#players span:first-child{overflow:hidden;text-overflow:ellipsis}
+.field{position:relative;min-height:0;border:2px solid #ac8053;border-radius:4px;background:#21343b;overflow:hidden}
+canvas{width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:none}
+#stage,#link-state{position:absolute;inset-inline:8px;pointer-events:none;margin:0;text-shadow:0 2px #101d21;font-weight:700}
+#stage{top:8px}#link-state{bottom:8px;color:#ffd07a}#retry[hidden]{display:none}
+@media(max-width:480px){main{padding:6px}h1{font-size:17px}#stage,#link-state{font-size:13px}#players{font-size:12px}}
+</style>
+<main>
+<header><h1>神明Q仙傳・雙人守廟埕</h1><div><button id="retry" type="button" hidden>重連</button> <a href="/games/nezha/game">返回大廳</a></div></header>
+<ul id="players" aria-label="隊友狀態"></ul>
+<section class="field" aria-label="雙人戰鬥區">
+<canvas id="battle-arena" aria-label="雙人戰鬥地圖"></canvas>
+<p id="stage"></p><p id="link-state" role="status">連接戰鬥房間中…</p>
+</section>
+</main>
+<script src="/games/nezha/battle.js"></script>
+</html>

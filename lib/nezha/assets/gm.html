@@ -22,6 +22,7 @@ input{min-width:0}.controls label{min-width:0;flex:0 1 270px}.controls input{wid
 th,td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#223c41;font-size:14px}tr:last-child td{border-bottom:0}
 tbody tr:nth-child(even){background:var(--row)}td{overflow-wrap:anywhere}td:nth-child(2){max-width:350px;white-space:pre-wrap}td:last-child{width:225px}
 small{display:block;color:var(--dim);margin-top:3px}.row-actions button{font-size:13px;min-height:34px;padding:5px 8px}.pagination{margin:14px 0}
+.nickname-history{margin-top:5px;font-size:13px}.nickname-history summary{cursor:pointer}.nickname-history ul{padding-inline-start:1.15rem;margin:4px 0}
 .danger{color:#ffc8be;border-color:#985b55}
 dialog{width:min(390px,calc(100% - 24px));max-height:85svh;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:6px;background:var(--row);color:var(--ink)}
 dialog::backdrop{background:#091417b8}dialog h2{margin:0 0 5px}dialog label{display:grid;gap:6px;margin-top:12px}
@@ -64,7 +65,13 @@ const actionDialog=byId('action-dialog'),actionForm=byId('action-form');
 const actionSave=byId('action-save'),actionCancel=byId('action-cancel');
 const formatter=new Intl.DateTimeFormat('zh-TW',{dateStyle:'short',timeStyle:'short'});
 const muteOptions=[[10,'10 分鐘'],[60,'1 小時'],[1440,'24 小時'],[10080,'7 天']];
-const views={chat:{name:'聊天紀錄',columns:['玩家','訊息','狀態','處理']},comments:{name:'排行榜留言',columns:['玩家','留言','狀態','處理']},accounts:{name:'玩家帳號',columns:['玩家','遊戲紀錄','狀態','處理']}};
+const views={
+  chat:{name:'聊天紀錄',columns:['玩家','訊息','狀態','處理']},
+  reports:{name:'密語檢舉',columns:['發送者／檢舉人','被檢舉訊息','處理紀錄','操作']},
+  comments:{name:'排行榜留言',columns:['玩家','留言','狀態','處理']},
+  accounts:{name:'玩家帳號',columns:['玩家','遊戲紀錄','狀態','處理']}
+};
+const reportReasons={harassment:'騷擾或辱罵',spam:'洗版或可疑廣告',other:'其他'};
 let section='chat',page=1,term='',signedIn=false,revision=0;
 async function request(route,data){
   const options=data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{};
@@ -135,19 +142,45 @@ function offerMute(actions,account){
   if(isMuted(account))offer(actions,account.id,'unmute','解除禁言',{route:'accounts'});
   else offer(actions,account.id,'mute','禁言',{route:'accounts',field:'minutes',account});
 }
+function drawNicknameHistory(cell,changes){
+  if(!changes.length)return;
+  const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ul');
+  details.className='nickname-history';
+  summary.textContent='最近改名紀錄';
+  for(const change of changes){
+    const item=document.createElement('li');
+    item.textContent=(change.previousNickname??'未設定')+' → '+change.nickname;
+    const date=document.createElement('small');
+    date.textContent=(change.changedBy==='gm'?'GM 代改':'玩家自行修改')+' · '+formatter.format(new Date(change.createdAt));
+    item.append(date);list.append(item);
+  }
+  details.append(summary,list);cell.append(details);
+}
 function drawRows(rows){
   body.replaceChildren();
   for(const item of rows){
     const row=body.insertRow();
-    const account=item.account??item;
+    const account=item.whisper?.sender??item.account??item;
     const {username,nickname}=account;
-    addCell(row,nickname||'尚未設定暱稱',username);
+    const identity=addCell(row,nickname||'尚未設定暱稱',username);
     const actions=document.createElement('div');actions.className='row-actions';
     if(section==='chat'){
       addCell(row,item.body,formatter.format(new Date(item.createdAt)));
       addCell(row,item.hiddenAt?'已隱藏':'公開',muteStatus(account));
       offer(actions,item.id,item.hiddenAt?'restore':'hide',item.hiddenAt?'還原':'隱藏');
       offer(actions,item.id,'delete','刪除',{confirmText:'確定永久刪除 '+username+' 這則聊天訊息？此操作無法還原。',danger:true});
+      offerMute(actions,account);
+    }else if(section==='reports'){
+      const reporter=document.createElement('small');
+      reporter.textContent='檢舉人：'+(item.whisper.recipient.nickname||item.whisper.recipient.username);
+      identity.append(reporter);
+      addCell(row,item.whisper.body,reportReasons[item.reason]+' · 檢舉於 '+formatter.format(new Date(item.createdAt)));
+      addCell(row,item.handledAt?(item.decision==='confirmed'?'已確認違規':'已駁回'):'待處理',
+        item.handledAt?formatter.format(new Date(item.handledAt))+' · '+item.handledBy:muteStatus(account));
+      if(!item.handledAt){
+        offer(actions,item.whisperId,'confirmed','確認違規',{confirmText:'確認這則密語違規？此操作只記錄判定，不會自動禁言。'});
+        offer(actions,item.whisperId,'dismissed','駁回檢舉',{confirmText:'確定駁回此檢舉？'});
+      }
       offerMute(actions,account);
     }else if(section==='comments'){
       addCell(row,item.message,'無限塔第 '+item.cleared+' 層');
@@ -157,13 +190,14 @@ function drawRows(rows){
     }else{
       const cleared=item.score?.cleared??0;
       const earned=Boolean(item.jigongUnlockedAt||cleared>=1);
+      drawNicknameHistory(identity,item.nicknameChanges);
       addCell(row,cleared?'無限塔第 '+cleared+' 層':'尚無上榜成績',earned?'濟公：遊戲解鎖':item.jigongGrantedAt?'濟公：GM 開放':'濟公：未解鎖');
       addCell(row,item.suspendedAt?'停用':'正常',muteStatus(item));
       offer(actions,item.id,'rename','修改暱稱',{field:'nickname',account});
       if(item.jigongGrantedAt)offer(actions,item.id,'remove-jigong-grant','收回手動開放',{confirmText:'收回 '+username+' 的 GM 角色開放？玩家自己取得的解鎖資格不受影響。'});
       else if(!earned)offer(actions,item.id,'grant-jigong','開放濟公',{confirmText:'為 '+username+' 開放濟公禪師？'});
       offerMute(actions,item);
-      offer(actions,item.id,item.suspendedAt?'restore':'suspend',item.suspendedAt?'恢復帳號':'停用帳號',{confirmText:item.suspendedAt?null:'停用 '+username+' 並登出該玩家？'});
+      offer(actions,item.id,item.suspendedAt?'restore':'suspend',item.suspendedAt?'恢復帳號':'停用帳號',{confirmText:item.suspendedAt?null:'停用 '+username+'、撤銷登入並解除其隊伍與組隊邀請？'});
       if(!item.suspendedAt)offer(actions,item.id,'revoke','撤銷登入',{confirmText:'讓 '+username+' 從所有裝置登出？'});
     }
     row.insertCell().append(actions);
@@ -173,6 +207,7 @@ async function load(done=''){
   const version=++revision;
   const view=views[section];
   byId('section-name').textContent=view.name;byId('page-number').textContent='第 '+page+' 頁';
+  query.placeholder=section==='accounts'?'帳號、暱稱或舊暱稱':'搜尋關鍵字';
   for(const button of nav.children){if(button.dataset.view===section)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}
   head.replaceChildren();const header=head.insertRow();
   for(const title of view.columns){const col=document.createElement('th');col.scope='col';col.textContent=title;header.append(col);}

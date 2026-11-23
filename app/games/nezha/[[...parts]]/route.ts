@@ -7,6 +7,8 @@ import { getScores, saveLeaderboardMessage, saveScore } from "@/lib/nezha/scores
 import { getLobbyMessages, sendLobbyMessage } from "@/lib/nezha/lobby";
 import { getGameProfile, recordTowerCheckpoint, recordTowerEntry, selectGameCharacter, startUnlockRun } from "@/lib/nezha/progress";
 import { gmAuthorized, gmCookie, gmPath, gmSessionSeconds, listGmRecords, loginGm, updateGmRecord } from "@/lib/nezha/gm";
+import { readSocial, socialRelease, writeSocial } from "@/lib/nezha/social";
+import { battleConnection, battleTicket } from "@/lib/nezha/battle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +34,9 @@ const assetTypes = {
   "index.html": "text/html; charset=utf-8",
   "game.html": "text/html; charset=utf-8",
   "gm.html": "text/html; charset=utf-8",
+  "social.js": "application/javascript; charset=utf-8",
+  "battle.html": "text/html; charset=utf-8",
+  "battle.js": "application/javascript; charset=utf-8",
   "nezha.webp": "image/webp",
   "nezha-sheet.png": "image/png",
   "jigong-attack-sheet.png": "image/png"
@@ -39,12 +44,15 @@ const assetTypes = {
 
 async function asset(name: keyof typeof assetTypes) {
   const bytes = await readFile(resolve(process.cwd(), "lib", "nezha", "assets", name));
+  const battleOrigin = name === "battle.html" ? battleConnection()?.origin : null;
   return new Response(new Uint8Array(bytes), {
     headers: {
       ...privateHeaders,
       ...(name === "gm.html" ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
+      ...(name === "index.html" || name === "game.html" ? { "X-Nezha-Version": socialRelease().version } : {}),
       "Content-Type": assetTypes[name],
-      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'"
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'" +
+        (battleOrigin ? `; connect-src 'self' ${battleOrigin}` : "")
     }
   });
 }
@@ -124,6 +132,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         return json({ authenticated: gmAuthorized(request) });
       case "gm/api/chat":
       case "gm/api/comments":
+      case "gm/api/reports":
       case "gm/api/accounts":
         if (!gmAuthorized(request)) throw new GameError(401, "請登入 GM 後台。");
         return json(await listGmRecords(path.split("/")[2], request.nextUrl.searchParams));
@@ -136,15 +145,21 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
           headers: { ...privateHeaders, Location: gamePath }
         });
       }
+      case "battle":
+        if ((await gameSession(request))?.account.nickname && socialRelease().features.battle) return await asset("battle.html");
+        return new Response(null, { status: 303, headers: { ...privateHeaders, Location: `${gamePath}/game` } });
       case "nezha.webp":
       case "nezha-sheet.png":
       case "jigong-attack-sheet.png":
+      case "social.js":
+      case "battle.js":
         if ((await gameSession(request))?.account.nickname) return await asset(path);
         break;
       case "api/session": {
         const session = await gameSession(request);
         const profile = session?.account.nickname ? await getGameProfile(session.account.id) : null;
-        return json({ authenticated: Boolean(session), nickname: session?.account.nickname ?? null, profile });
+        return json({ authenticated: Boolean(session), nickname: session?.account.nickname ?? null, profile,
+          ...(session?.account.nickname ? { playerId: session.account.id, release: socialRelease() } : {}) });
       }
       case "api/leaderboard": {
         const session = await gameSession(request);
@@ -156,6 +171,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         break;
       }
       default:
+        if (/^api\/social\/(?:state|profile|friends|whispers|party)$/.test(path)) {
+          const session = await gameSession(request);
+          if (!session?.account.nickname) break;
+          return json(await readSocial(session.account.id, path.split("/")[2]));
+        }
         return json({ error: "找不到頁面。" }, 404);
     }
     return json({ error: "請先登入。" }, 401);
@@ -170,7 +190,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const data = await readData(request);
     if (path === "gm/api/login") return setGmCookie(json({ ok: true }), request, await loginGm(request, data.username, data.password), gmSessionSeconds);
     if (path === "gm/api/logout") return setGmCookie(json({ ok: true }), request, "", 0);
-    if (path === "gm/api/chat" || path === "gm/api/comments" || path === "gm/api/accounts") {
+    if (path === "gm/api/chat" || path === "gm/api/comments" || path === "gm/api/reports" || path === "gm/api/accounts") {
       if (!gmAuthorized(request)) throw new GameError(401, "請登入 GM 後台。");
       await updateGmRecord(path.split("/")[2], data);
       return json({ ok: true });
@@ -188,6 +208,14 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!session) throw new GameError(401, "請先登入。");
 
     const { account } = session;
+    if (path === "api/battle-ticket") {
+      if (!account.nickname || !socialRelease().features.battle) throw new GameError(404, "雙人戰鬥尚未開放。");
+      return json(await battleTicket(account.id));
+    }
+    if (path && /^api\/social\/(?:profile|friends|whispers|party)$/.test(path)) {
+      if (!account.nickname) throw new GameError(403, "請先設定暱稱。");
+      return json(await writeSocial(account.id, path.split("/")[2], data));
+    }
     if (path === "api/character" || path === "api/run/start" || path === "api/run/enter-tower" || path === "api/run/tower-checkpoint") {
       if (!account.nickname) throw new GameError(403, "請先設定暱稱。");
       if (await limitAttempts(`${path}:${account.id}`, 16)) throw new GameError(429, "操作太頻繁，請稍後再試。");

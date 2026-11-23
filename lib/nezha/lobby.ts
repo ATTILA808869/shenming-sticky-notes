@@ -11,7 +11,7 @@ export async function getLobbyMessages() {
     where: { createdAt: { gte: historyStart() }, hiddenAt: null },
     orderBy: { id: "desc" },
     take: historyLimit,
-    select: { id: true, body: true, createdAt: true, account: { select: { nickname: true } } }
+    select: { id: true, accountId: true, body: true, createdAt: true, account: { select: { nickname: true } } }
   });
   return messages.reverse().map(({ account, ...message }) => ({ ...message, nickname: account.nickname }));
 }

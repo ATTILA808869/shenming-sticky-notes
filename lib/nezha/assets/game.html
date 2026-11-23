@@ -107,6 +107,46 @@ html.lobby .unlock-toast{display:none}
 .lobby-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}
 .lobby-form input{width:100%;min-width:0;border:1px solid var(--line);border-radius:4px;padding:8px;background:#152931;color:var(--ink);font:inherit}
 .lobby-form input:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.lobby-panels{display:flex;flex:1;min-height:0;flex-direction:column}
+.lobby-social-rail{margin:0 0 9px;padding:8px;border:1px solid var(--line);border-radius:4px;background:#152931}
+.lobby-social-rail h2{font-size:15px;margin:0 0 5px;color:var(--gold)}
+.card .lobby-social-rail p{margin:4px 0;font-size:12px;line-height:1.35}
+.card .party-member .portrait{width:36px;height:36px}
+.party-members{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.party-member{display:flex;align-items:center;gap:4px;min-width:0;overflow-wrap:anywhere}
+.party-member .portrait{flex:none}.party-member strong,.party-member small{display:block;font-size:12px}
+.social-actions{display:flex;flex-wrap:wrap;gap:6px}
+.social-actions button{padding:4px 8px;font-size:13px}
+.social-channels{display:flex;flex:none;gap:6px;margin-bottom:6px}
+.social-channels button{font-size:13px;padding:5px 8px;background:#152931;color:var(--muted);box-shadow:none}
+.social-channels button[aria-pressed=true]{border-color:var(--gold);color:var(--gold)}
+.player-action{padding:3px 0;min-width:0;overflow-wrap:anywhere;background:none;color:var(--gold);border:0;box-shadow:none;font:inherit;font-weight:700;text-align:start}
+.player-action:hover:enabled{box-shadow:none;text-decoration:underline;background:none;color:var(--gold)}
+.social-dialog .actions{margin:10px 0}
+.social-list{list-style:none;margin:4px 0 12px;padding:0}
+.social-list li{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px 10px;padding:7px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.social-field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.social-release{color:var(--muted);font-size:12px;margin:2px 0}
+.social-status:empty{display:none}
+.whisper-target button{font-size:12px;padding:2px 7px}
+.whisper-report{padding:2px 5px;margin-inline-start:7px;font-size:12px;box-shadow:none;vertical-align:baseline}
+.social-dialog select{width:100%;font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px;color:var(--ink);background:#152931}
+@media(min-width:850px),(min-width:540px) and (max-height:470px){
+  .lobby-panels.with-party{display:grid;grid-template-columns:minmax(0,1fr) 185px;gap:12px}
+  .lobby-panels.with-party .lobby-social-rail{align-self:start}
+  .lobby-panels.with-party .party-members{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  .card.lobby-hub:has(.with-party){height:100%}
+  .lobby-hub:has(.with-party) .lobby-nav{margin:5px 0}
+  .lobby-panels.with-party .lobby-chat-view:has(.social-channels)>h2{
+    position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%)
+  }
+  .lobby-social-rail{margin-bottom:5px;padding:5px}
+  .lobby-social-rail h2{margin-bottom:2px;font-size:13px}
+  .lobby-social-rail .social-actions button{padding:3px 6px}
+  .card .party-member .portrait{width:28px;height:28px}
+}
 .lobby-room [role=status]:empty{display:none}
 @media(max-width:560px){
   main{padding:8px;gap:6px}header strong{font-size:18px}.account{gap:4px;font-size:12px}
@@ -161,6 +201,7 @@ html.lobby .unlock-toast{display:none}
   <header><h2 id="update-title">更新日誌</h2><form method="dialog"><button type="submit">關閉</button></form></header>
   <div id="update-entries"></div>
 </dialog>
+<script src="/games/nezha/social.js"></script>
 <script>
 const canvas = document.querySelector('#arena');
 const ctx = canvas.getContext('2d');
@@ -439,7 +480,7 @@ function togglePause(){
 }
 pause.onclick=togglePause;
 document.addEventListener('keydown',event=>{
-  if(updateDialog.open)return;
+  if(updateDialog.open||document.querySelector('.social-dialog[open]'))return;
   if(event.target instanceof HTMLTextAreaElement||event.target instanceof HTMLInputElement)return;
   const key=event.key.toLowerCase();
   if(mode!=='play'&&/^[1-8]$/.test(key)&&!event.altKey&&!event.ctrlKey&&!event.metaKey){
@@ -934,7 +975,7 @@ function refreshLobbyPlay(){
   if(!button)return;
   const failed=profile.character==='jigong'?jigongSheetFailed:heroSheetFailed;
   button.disabled=!runInProgress&&(startingRun||selectingCharacter||!failed&&!characterSheet(profile.character).naturalWidth);
-  button.textContent=runInProgress?'繼續遊戲':startingRun?'確認角色中…':selectingCharacter?'套用角色中…':failed?'重試載入角色':button.disabled?'角色載入中…':'開始守廟埕';
+  button.textContent=runInProgress?'繼續遊戲':startingRun?'確認角色中…':selectingCharacter?'套用角色中…':failed?'重試載入角色':button.disabled?'角色載入中…':socialState.party?'開始單人守廟埕':'開始守廟埕';
   const tower=card.querySelector('#lobby-tower-start');
   if(tower){
     tower.hidden=runInProgress||!profile.towerStartUnlocked;
@@ -1012,7 +1053,9 @@ function showLobby(){
   const nav=document.createElement('nav');nav.className='lobby-nav';nav.setAttribute('aria-label','大廳導覽');
   const content=document.createElement('section');content.id='lobby-view';content.className='lobby-view';
   content.setAttribute('aria-labelledby','lobby-view-title');
-  actions.before(nav,content);
+  const panels=document.createElement('div');panels.className='lobby-panels';
+  const rail=document.createElement('aside');rail.className='lobby-social-rail';rail.hidden=true;
+  panels.append(content,rail);actions.before(nav,panels);
   const play=document.createElement('button');play.id='lobby-play';play.type='button';
   play.onclick=event=>{
     if(runInProgress)setMode('play');
@@ -1026,9 +1069,12 @@ function showLobby(){
   refreshLobbyPlay();
 
   let active,controller;
-  closeLobby=()=>controller?.abort();
-  const buttons=lobbyViews.map(([id,label,mount])=>{
+  const lobbyWork=new AbortController();
+  closeLobby=()=>{controller?.abort();lobbyWork.abort();};
+  const views=[...lobbyViews,...lobbySocialViews()];
+  const buttons=views.map(([id,label,mount])=>{
     const button=document.createElement('button');button.type='button';button.textContent=label;
+    button.dataset.lobbyTab=id;
     button.setAttribute('aria-controls',content.id);
     button.onclick=()=>{
       if(active===id)return;
@@ -1044,6 +1090,7 @@ function showLobby(){
     return button;
   });
   buttons[0].click();
+  mountSocialRail(panels,rail,lobbyWork.signal);
 }
 function lobbyHeading(container,title){
   const heading=document.createElement('h2');heading.id='lobby-view-title';heading.textContent=title;
@@ -1058,6 +1105,8 @@ function mountLobbyHome(container){
   const character=runInProgress?player.character:profile.character;
   detail.textContent=runInProgress?characterNames[character]+' · 等級 '+player.level+' · '+(towerFloor?'無限塔第 '+towerFloor+' 層':'生存 '+formatTime(time)):characterNames[character]+' · 廟埕守護・無限塔';
   info.append(status,detail);banner.append(createHeroPortrait(character),info);container.append(banner);
+  const release=document.createElement('p');release.className='social-release';release.textContent='版本 '+gameReleaseVersion();
+  container.append(release);
   if(checkpointRun)mountCheckpointStatus(container);
 }
 function mountLobbyCharacter(container,signal){
@@ -1121,74 +1170,135 @@ function mountLobbyRanking(container,signal){
 }
 function mountLobbyChat(container,signal){
   lobbyHeading(container,'大廳聊天室');
+  const channels=socialElement('div',null,'social-channels');
+  const publicChannel=socialButton('大廳',()=>switchChannel('lobby'));
+  const privateChannel=socialButton('密語',()=>switchChannel('whispers'));
+  privateChannel.id='social-whisper-channel';
+  channels.append(publicChannel,privateChannel);
+  if(socialFeatures.whispers)container.append(channels);
   const room=document.createElement('section');room.className='lobby-room';
   const log=document.createElement('ol');log.className='lobby-log';
   log.setAttribute('role','log');log.setAttribute('aria-label','大廳訊息');log.tabIndex=0;
   const state=document.createElement('div');state.setAttribute('role','status');state.textContent='載入聊天室…';
   const form=document.createElement('form');form.className='lobby-form';
   const input=document.createElement('input');input.placeholder='輸入訊息';input.required=true;
-  input.maxLength=280;input.autocomplete='off';input.setAttribute('aria-label','大廳訊息內容');
-  input.value=lobbyDraft;
-  input.addEventListener('input',()=>{lobbyDraft=input.value;});
+  input.autocomplete='off';
+  input.maxLength=320;
+  input.addEventListener('input',()=>{if(channel==='lobby')lobbyDraft=input.value;else whisperDraft=input.value;});
   const send=document.createElement('button');send.type='submit';send.textContent='發送';
   const feedback=document.createElement('div');feedback.setAttribute('role','status');
-  form.append(input,send);room.append(log,state,form,feedback);container.append(room);
+  const target=socialElement('div',null,'social-status whisper-target');
+  form.append(input,send);room.append(log,state,target,form,feedback);container.append(room);
 
   const formatter=new Intl.DateTimeFormat('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-  let timer,revision=0;
-  signal.addEventListener('abort',()=>clearTimeout(timer),{once:true});
+  let channel,revision=0;
+  function switchChannel(next,focus=false){
+    if(next!==channel){
+      log.replaceChildren();state.textContent='載入訊息…';
+      channel=chatChannel=next;
+      input.value=channel==='lobby'?lobbyDraft:whisperDraft;
+    }
+    const privateMode=channel==='whispers';
+    publicChannel.setAttribute('aria-pressed',String(!privateMode));
+    privateChannel.setAttribute('aria-pressed',String(privateMode));
+    input.setAttribute('aria-label',privateMode?'密語內容':'大廳訊息內容');
+    log.setAttribute('aria-label',privateMode?'密語訊息':'大廳訊息');
+    input.placeholder=privateMode&&!selectedWhisper?'/w "玩家暱稱" 訊息':'輸入訊息';
+    target.replaceChildren();
+    if(privateMode&&selectedWhisper){
+      target.append(document.createTextNode('密語對象：'+selectedWhisper.nickname+' '),
+        socialButton('清除',()=>{selectedWhisper=null;switchChannel('whispers',true);}));
+    }
+    updateUnread(socialState.unread);
+    if(focus)input.focus();
+    void refresh();
+  }
+  const focusWhisper=()=>switchChannel('whispers',true);
+  refreshWhisperTab=focusWhisper;
+  signal.addEventListener('abort',()=>{if(refreshWhisperTab===focusWhisper)refreshWhisperTab=null;},{once:true});
   function render(messages){
     const follow=log.scrollHeight-log.scrollTop-log.clientHeight<36;
     const existing=new Map(Array.from(log.children,row=>[Number(row.dataset.id),row]));
     let next=log.firstElementChild;
     let changed=false;
     for(const message of messages){
+      const sent=channel==='whispers'&&message.sender.id===socialPlayerId;
+      const player=channel==='lobby'?{id:message.accountId,nickname:message.nickname}:sent?message.recipient:message.sender;
+      const label=channel==='lobby'?player.nickname:sent?'傳給「'+player.nickname+'」的密語':'來自「'+player.nickname+'」的密語';
       let row=existing.get(message.id);
       if(!row){
         row=document.createElement('li');row.dataset.id=message.id;
         const meta=document.createElement('div');meta.className='lobby-meta';
-        const author=document.createElement('strong');author.textContent=message.nickname;
+        row.author=player;
+        const author=contactButton(row.author,label);
         const time=document.createElement('time');time.dateTime=message.createdAt;
         time.textContent=formatter.format(new Date(message.createdAt));
         const body=document.createElement('span');body.textContent=message.body;
         meta.append(author,time);row.append(meta,body);
-      }else setText(row.querySelector('strong'),message.nickname);
+        if(channel==='whispers'&&!sent){
+          row.reportButton=whisperReportButton(message.id);
+          row.append(row.reportButton);
+        }
+      }else{
+        row.author.nickname=player.nickname;
+        setText(row.querySelector('.lobby-meta').firstElementChild,label);
+      }
+      if(row.reportButton&&message.reported){
+        row.reportButton.disabled=true;setText(row.reportButton,'已檢舉');
+      }
       if(row!==next){log.insertBefore(row,next);changed=true;}
       next=row.nextElementSibling;
     }
     while(next){const extra=next;next=next.nextElementSibling;extra.remove();changed=true;}
-    setText(state,messages.length?'':'目前還沒有訊息。');
+    setText(state,messages.length?'':channel==='whispers'?'還沒有密語。':'目前還沒有訊息。');
     if(changed&&follow)log.scrollTop=log.scrollHeight;
   }
   async function refresh(){
     const version=++revision;
     try{
-      const {messages}=await accountRequest('lobby',null,signal);
-      if(!signal.aborted&&version===revision)render(messages);
+      const {messages,unread}=await accountRequest(channel==='lobby'?'lobby':'social/whispers',null,signal);
+      if(signal.aborted||version!==revision)return;
+      render(messages);
+      if(channel==='whispers'){
+        updateUnread(unread);
+        if(unread&&!document.hidden&&messages.length){
+          await accountRequest('social/whispers',{action:'read',throughId:messages.at(-1).id},signal);
+          if(!signal.aborted&&version===revision)updateUnread(0);
+        }
+      }
     }catch(error){
       if(!signal.aborted&&version===revision)state.textContent=error.message;
     }
-  }
-  async function poll(){
-    if(!document.hidden)await refresh();
-    if(!signal.aborted)timer=setTimeout(poll,5000);
   }
   form.addEventListener('submit',async event=>{
     event.preventDefault();
     if(send.disabled)return;
     const message=input.value.trim();
-    if(!message||[...message].length>140){feedback.textContent='訊息須為 1～140 個字。';return;}
+    if(!message)return;
+    const from=channel;
     send.disabled=true;feedback.textContent='';
     try{
-      await accountRequest('lobby',{message},signal);
+      const command=parseWhisperCommand(message);
+      if(command||from==='whispers'){
+        if(!socialFeatures.whispers)throw new Error('密語目前未開放。');
+        if(!command&&!selectedWhisper)throw new Error('請先選擇玩家，或輸入 /w "玩家暱稱" 訊息。');
+        await accountRequest('social/whispers',{action:'send',...(command??{targetId:selectedWhisper.id,message})},signal);
+      }else{
+        if([...message].length>140)throw new Error('訊息須為 1～140 個字。');
+        await accountRequest('lobby',{message},signal);
+      }
       if(signal.aborted)return;
-      if(input.value.trim()===message)input.value=lobbyDraft='';
+      if(from===channel&&input.value.trim()===message)input.value='';
+      if(from==='lobby'&&lobbyDraft.trim()===message)lobbyDraft='';
+      if(from==='whispers'&&whisperDraft.trim()===message)whisperDraft='';
+      if(command){selectedWhisper=null;switchChannel('whispers',true);}
       await refresh();
       if(!signal.aborted)log.scrollTop=log.scrollHeight;
     }catch(error){if(!signal.aborted)feedback.textContent=error.message;}
     finally{send.disabled=false;}
   });
-  void poll();
+  switchChannel(socialFeatures.whispers?chatChannel:'lobby');
+  socialPoll(signal,refresh);
 }
 function addLeaderboardEditor(score,messageLabel,list){
   const form=document.createElement('form');
@@ -2458,6 +2568,12 @@ function setProgress(element,value,max=1){
   if(element.value!==next||!element.hasAttribute('value'))element.value=next;
 }
 const updateHistory=[
+  {date:'2026-11-23',title:'重大更新001・版本 0.112301',changes:[
+    ['帳號與好友','可在大廳修改暱稱，並送出、接受好友邀請；改名不會影響好友或遊戲進度。'],
+    ['密語頻道','點選玩家名稱或在電腦按右鍵可開啟互動選單。密語在獨立頻道接收，並顯示未讀提醒。'],
+    ['玩家檢舉','收到不當密語時，可單獨檢舉該則訊息。GM 不會因此取得其他私人對話。'],
+    ['雙人隊伍大廳','可邀請隊友、接受或拒絕邀請，並查看雙方角色與準備狀態。合作試玩開放時，兩人準備後即可進入同一場戰鬥。']
+  ]},
   {date:'2026-11-23',title:'無限塔起點與高等升級調整',changes:[
     ['無限塔起點','通過第 1 層後，帳號會記錄起點資格。新局可照常從廟埕開始，或直接從無限塔第 1 層開始。塔起點角色為 Lv.50，入場前可選 50 次升級配點及 25 次小魔王戰利品。'],
     ['強化道具','神刀與神甲不設強化上限。神馬在移速到達 100 後停止強化。大魂丹的最大血量上限改為 1,000，到頂後每次選擇改為回復 60% 最大血量。'],
@@ -2557,6 +2673,7 @@ resize();reset();setMode('loading');panel('神明Q仙傳','載入中…',[]);
 heroSheet.src=heroSheetUrl;
 accountRequest('session').then(account=>{
   if(!account.nickname){location.replace('/games/nezha');return;}
+  configureSocialAccount(account);
   updateLobbyAccount(account);
   showLobby();
 }).catch(()=>{location.replace('/games/nezha');});

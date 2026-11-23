@@ -1,0 +1,7 @@
+{
+  "name": "nezha-battle",
+  "version": "0.112301",
+  "private": true,
+  "scripts": { "start": "node server.cjs", "test": "node --test" },
+  "dependencies": { "ws": "^8.22.2" }
+}

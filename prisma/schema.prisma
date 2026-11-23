@@ -106,6 +106,94 @@ model NezhaAccount {
   sessions           NezhaSession[]
   score              NezhaScore?
   chatMessages       NezhaChatMessage[]
+  friendsA           NezhaFriend[]       @relation("FriendA")
+  friendsB           NezhaFriend[]       @relation("FriendB")
+  blocks             NezhaPlayerBlock[]  @relation("BlockOwner")
+  blockedBy          NezhaPlayerBlock[]  @relation("BlockedPlayer")
+  whispersSent       NezhaWhisper[]      @relation("WhisperSender")
+  whispersReceived   NezhaWhisper[]      @relation("WhisperRecipient")
+  partiesLed         NezhaParty[]        @relation("PartyLeader")
+  partiesInvited     NezhaParty[]        @relation("PartyGuest")
+  nicknameChanges    NezhaNicknameChange[]
+}
+
+model NezhaFriend {
+  playerAId   String
+  playerBId   String
+  requestedBy String
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+  playerA     NezhaAccount @relation("FriendA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB     NezhaAccount @relation("FriendB", fields: [playerBId], references: [id], onDelete: Cascade)
+
+  @@id([playerAId, playerBId])
+  @@index([playerBId])
+}
+
+model NezhaPlayerBlock {
+  ownerId  String
+  targetId String
+  owner    NezhaAccount @relation("BlockOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  target   NezhaAccount @relation("BlockedPlayer", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([ownerId, targetId])
+  @@index([targetId])
+}
+
+model NezhaWhisper {
+  id          Int      @id @default(autoincrement())
+  senderId    String
+  recipientId String
+  body        String   @db.VarChar(140)
+  createdAt   DateTime @default(now())
+  readAt      DateTime?
+  sender      NezhaAccount @relation("WhisperSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   NezhaAccount @relation("WhisperRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  report      NezhaWhisperReport?
+
+  @@index([senderId, id])
+  @@index([recipientId, id])
+  @@index([recipientId, readAt])
+}
+
+model NezhaWhisperReport {
+  whisperId  Int      @id
+  reason     String   @db.VarChar(20)
+  createdAt  DateTime @default(now())
+  decision   String?  @db.VarChar(20)
+  handledAt  DateTime?
+  handledBy  String?  @db.VarChar(24)
+  whisper    NezhaWhisper @relation(fields: [whisperId], references: [id], onDelete: Cascade)
+
+  @@index([handledAt, createdAt])
+}
+
+model NezhaNicknameChange {
+  id               Int      @id @default(autoincrement())
+  accountId        String
+  previousNickname String?
+  nickname         String
+  changedBy        String   @db.VarChar(12)
+  createdAt        DateTime @default(now())
+  account          NezhaAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, id])
+}
+
+model NezhaParty {
+  id          String   @id @default(cuid())
+  leaderId    String
+  guestId     String
+  leaderReady Boolean  @default(false)
+  guestReady  Boolean  @default(false)
+  joinedAt    DateTime?
+  expiresAt   DateTime
+  leader      NezhaAccount @relation("PartyLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  guest       NezhaAccount @relation("PartyGuest", fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([leaderId, expiresAt])
+  @@index([guestId, expiresAt])
+  @@index([expiresAt])
 }
 
 model NezhaChatMessage {
