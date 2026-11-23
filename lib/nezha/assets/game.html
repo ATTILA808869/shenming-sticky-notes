@@ -1305,21 +1305,19 @@ function addLeaderboardEditor(score,messageLabel,list){
   form.className='ranking-editor';
   const label=document.createElement('label');
   label.htmlFor='ranking-message-input';
-  const updateLabel=count=>{
-    label.textContent='排行榜留言（剩 '+count+' 次，最多 80 字，可宣傳品牌）';
-  };
-  updateLabel(score.messageCredits);
+  label.textContent='我的排行榜留言（最多 80 字）';
   const input=document.createElement('textarea');
   input.id=label.htmlFor;
   input.rows=2;
   input.maxLength=80;
-  input.value=score.message??'';
+  input.value=score.ownMessage??'';
   input.required=true;
   const save=document.createElement('button');
   save.type='submit';
   save.textContent='儲存留言';
   const status=document.createElement('div');
   status.setAttribute('role','status');
+  if(score.messageHidden)status.textContent='這則留言目前由 GM 隱藏。';
   form.append(label,input,save,status);
   list.before(form);
 
@@ -1330,14 +1328,10 @@ function addLeaderboardEditor(score,messageLabel,list){
     input.readOnly=true;
     status.textContent='';
     try{
-      const {message,messageCredits}=await accountRequest('leaderboard/message',{message:input.value});
-      messageLabel.textContent=message;
-      status.textContent='留言已刊登。';
-      if(messageCredits>0){
-        updateLabel(messageCredits);
-      }else{
-        label.remove();input.remove();save.remove();
-      }
+      const {message,messageHidden}=await accountRequest('leaderboard/message',{message:input.value});
+      input.value=message;
+      messageLabel.textContent=messageHidden?'':message;
+      status.textContent=messageHidden?'留言已儲存，仍由 GM 隱藏。':'留言已更新。';
     }catch(error){status.textContent=error.message;}
     finally{save.disabled=false;input.readOnly=false;}
   });
@@ -1363,7 +1357,7 @@ async function loadLeaderboard(container,signal){
       messageLabel.textContent=score.message??'';
       row.append(messageLabel);
       list.append(row);
-      if(score.messageCredits>0)addLeaderboardEditor(score,messageLabel,list);
+      if(score.canEditMessage)addLeaderboardEditor(score,messageLabel,list);
     }
   }catch(error){if(!signal?.aborted&&status.isConnected)status.textContent=error.message;}
 }
@@ -1389,7 +1383,6 @@ function finish(won){
     try{
       const result=await accountRequest('score',record);
       status.textContent=result.updated?'已儲存最高通過樓層。':'已保留你原有的最高通過樓層。';
-      if(result.earnedMessage)status.textContent+=' 恭喜刷新名次！可到排行榜留言一次。';
     }catch(error){status.textContent=error.message;button.disabled=false;}
   }]);
   choices.push(['回到大廳',showLobby]);
@@ -2572,6 +2565,7 @@ const updateHistory=[
     ['帳號與好友','可在大廳修改暱稱，並送出、接受好友邀請；改名不會影響好友或遊戲進度。'],
     ['密語頻道','點選玩家名稱或在電腦按右鍵可開啟互動選單。密語在獨立頻道接收，並顯示未讀提醒。'],
     ['玩家檢舉','收到不當密語時，可單獨檢舉該則訊息。GM 不會因此取得其他私人對話。'],
+    ['排行榜留言','前 100 名玩家可隨時設定或修改自己的留言，最多 80 字，不需要提升名次。'],
     ['雙人隊伍大廳','可邀請隊友、接受或拒絕邀請，並查看雙方角色與準備狀態。合作試玩開放時，兩人準備後即可進入同一場戰鬥。']
   ]},
   {date:'2026-11-23',title:'無限塔起點與高等升級調整',changes:[

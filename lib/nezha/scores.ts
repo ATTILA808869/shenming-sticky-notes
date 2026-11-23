@@ -14,14 +14,15 @@ export async function getScores(accountId: string) {
     where: { cleared: { gt: 0 } },
     orderBy: rankOrder,
     take: leaderboardLimit,
-    select: { accountId: true, account: { select: { nickname: true } }, cleared: true, message: true, messageCredits: true, messageHiddenAt: true }
+    select: { accountId: true, account: { select: { nickname: true } }, cleared: true, message: true, messageHiddenAt: true }
   });
 
   return scores.map((score) => ({
     nickname: score.account.nickname,
     cleared: score.cleared,
     message: score.messageHiddenAt ? null : score.message,
-    messageCredits: score.accountId === accountId ? (score.messageCredits ?? 1) : 0
+    canEditMessage: score.accountId === accountId,
+    ...(score.accountId === accountId ? { ownMessage: score.message, messageHidden: Boolean(score.messageHiddenAt) } : {})
   }));
 }
 
@@ -34,21 +35,20 @@ export async function saveLeaderboardMessage(value: unknown, accountId: string) 
     throw new GameError(400, "請輸入 1～80 字的留言。");
   }
 
-  const [updated] = await prisma.$queryRaw<{ messageCredits: number }[]>`
+  const [updated] = await prisma.$queryRaw<{ messageHiddenAt: Date | null }[]>`
     UPDATE "NezhaScore"
-    SET "message" = ${message}, "messageCredits" = COALESCE("messageCredits", 1) - 1, "messageHiddenAt" = NULL
+    SET "message" = ${message}
     WHERE "accountId" = ${accountId}
-      AND COALESCE("messageCredits", 1) > 0
       AND "accountId" IN (
         SELECT "accountId" FROM "NezhaScore"
         WHERE "cleared" > 0
         ORDER BY "cleared" DESC, "recordedAt" ASC, "accountId" ASC
         LIMIT ${leaderboardLimit}
       )
-    RETURNING "messageCredits"
+    RETURNING "messageHiddenAt"
   `;
-  if (!updated) throw new GameError(403, "上榜或提升目前名次後，才有新的留言機會。");
-  return { message, messageCredits: updated.messageCredits };
+  if (!updated) throw new GameError(403, "只有目前在前 100 名的玩家可以修改自己的留言。");
+  return { message, messageHidden: Boolean(updated.messageHiddenAt) };
 }
 
 async function getRank(tx: Prisma.TransactionClient, accountId: string) {
@@ -90,7 +90,7 @@ export async function saveScore(data: Record<string, unknown>, accountId: string
         const rank = await getRank(tx, accountId);
         const earnedMessage = rank !== null && (previousRank === null || rank < previousRank);
         if (earnedMessage) {
-          // Legacy rows have one initial opportunity while already ranked.
+          // Preserve rank-based credits for compatibility if version 0.1123 is restored.
           const credits = previous?.messageCredits ?? (previousRank === null ? 0 : 1);
           await tx.nezhaScore.update({
             where: { accountId },
