@@ -2,6 +2,7 @@ const R = require("../../lib/nezha/assets/battle-rules.js");
 const Combat = require("../../lib/nezha/assets/battle-combat.js");
 const width = 2880, height = 2160;
 const graceMs = 90_000, reviveRadius = 96, reviveSeconds = 3;
+const lootRules = R.loot;
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const gap = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const available = p => p.connected && p.hp > 0;
@@ -23,13 +24,14 @@ function createRoom(roster, now = Date.now(), random = Math.random) {
     floor: 0, floorTime: 0, towerTime: 0, floorKills: 0, cleared: 0, kills: 0, graceUntil: 0,
     createdAt: now, vacantAt: now, nextId: 1, nextSpawn: .35, nextAim: 0, miniKills: 0, miniThreshold: 50,
     enemies: [], bolts: [], warnings: [], loot: [], sparks: [], boss: null, random,
+    magnetFlights: [], magnetPulses: [], bombBursts: [], pickupNotice: null,
     players: roster.map((p, index) => ({
       ...R.createCharacter(p.character), id: p.id, name: p.name,
       x: width / 2 + (index * 2 - 1) * 52, y: height / 2,
       connected: false, disconnectedAt: null, dx: 0, dy: 0, heading: 0, facing: -1,
       attackFacing: -1, attackUntil: -1, attackAt: -1, pendingLevels: 0, gearRewards: 0,
       reward: null, revive: 0, safeUntil: 0, enteredTower: false, creditedFloor: 0, creditedKills: 0,
-      combat: Combat.create(R, random)
+      combat: Combat.create(R, random), wheelTrail: []
     }))
   };
 }
@@ -115,7 +117,7 @@ function reviveTeam(room, dt) {
     p.revive += dt;
     if (p.revive + 1e-8 < reviveSeconds) continue;
     p.hp = Math.ceil(p.maxHp * .30); p.revive = 0; p.safeUntil = room.time + 1.5;
-    room.sparks.push({ x: p.x, y: p.y, r: 52, life: .65, kind: "heal" });
+    room.sparks.push({ x: p.x, y: p.y, r: 52, life: .65, kind: "revive" });
   }
 }
 
@@ -207,11 +209,14 @@ function playerAttacks(room, dt) {
     if (combat.effects().jigongWindCasts.length) combat.advanceJigongWind(dt, room.enemies);
     const start = p.wheelAngle, sweep = p.wheelSpeed * dt;
     p.wheelAngle = (start + sweep) % (Math.PI * 2);
+    p.wheelTimer = Math.max(0, p.wheelTimer - dt);
+    p.wheelTrail = p.wheelTrail.filter(flame => (flame.life -= dt) > 0);
     if (!active || !p.wheels) continue;
     const flaming = p.evolved[1], radius = R.wheelHitRadius * (flaming ? R.wheelEvolutionScale : 1);
+    if (flaming) for (let i = 0; i < p.wheels; i++) p.wheelTrail.push({ ...wheelPoint(p, i), life: .32 });
     for (const e of room.enemies) {
       if (e.hp <= 0 || room.time < (e.wheels.get(p.id) ?? 0) || !combat.wheelSweepsEnemy(e, start, sweep, radius)) continue;
-      e.wheels.set(p.id, room.time + R.wheelCooldown); combat.damage(e, p.wheelDamage);
+      e.wheels.set(p.id, room.time + R.wheelCooldown); combat.damage(e, p.wheelDamage); p.wheelTimer = R.wheelCooldown;
       if (room.time >= p.attackUntil + .14) combat.poseForAttack(e);
       if (flaming && e.hp > 0 && room.time >= (e.wheelKnockback ?? 0)) {
         const d = gap(e, p) || 1, force = e.name ? 24 : 55;
@@ -220,6 +225,10 @@ function playerAttacks(room, dt) {
       }
     }
   }
+}
+function wheelPoint(p, i) {
+  const theta = p.wheelAngle + i * 2 * Math.PI / p.wheels;
+  return { x: p.x + Math.cos(theta) * R.wheelOrbitRadius, y: p.y + Math.sin(theta) * R.wheelOrbitRadius };
 }
 
 function enemyAttack(room, e) {
@@ -246,6 +255,7 @@ function moveEnemies(room, living, dt) {
     if (!e.aim && distance > stop) {
       const step = Math.min(distance - stop, e.speed * room.players[0].combat.jigongSlowFactor(e) * dt);
       e.x += (target.x - e.x) * step / distance; e.y += (target.y - e.y) * step / distance;
+      if (Math.abs((target.x - e.x) / distance) > .08) e.facing = Math.sign(target.x - e.x);
     }
     // Separate crowds before testing contact, so moved enemies cannot hit from the old position.
     const ix = Math.floor(e.x / 104), iy = Math.floor(e.y / 104);
@@ -347,41 +357,84 @@ function enemyCasts(room, living, dt) {
     start: room.time, until: room.time + profile.windup };
 }
 
-function detonate(room, p, limit) {
-  const targets = room.enemies.filter(e => e.hp > 0 && !e.guardian && !e.mini);
-  for (let i = 0; i < Math.min(limit, targets.length); i++) {
+function detonate(room, p, count) {
+  const targets = room.enemies.filter(e => e.hp > 0 && !e.guardian);
+  const limit = Math.min(count * lootRules.bombKillLimit, targets.length);
+  for (let i = 0; i < limit; i++) {
     const random = i + Math.floor(room.random() * (targets.length - i));
     [targets[i], targets[random]] = [targets[random], targets[i]];
     targets[i].hp = 0;
+    room.sparks.push({ x: targets[i].x, y: targets[i].y, r: 8, life: .28, kind: "bomb-hit" });
   }
-  room.sparks.push({ x: p.x, y: p.y, r: 300, life: .4, kind: "bomb" });
+  room.sparks.push({ x: p.x, y: p.y, r: 36, life: lootRules.bombFlashTime, kind: "bomb" });
+  room.pickupNotice = { kind: "bomb", count: limit, until: room.time + 1.5 };
+}
+function sharedXP(room, amount, now) {
+  if (amount > 0) for (const p of room.players) if (withinGrace(p, now)) addXP(room, p, amount);
+}
+function healTeam(room, count, now) {
+  if (!count) return;
+  for (const p of room.players) {
+    if (!withinGrace(p, now) || p.hp <= 0) continue;
+    const before = p.hp;
+    heal(p, lootRules.healFraction * count);
+    if (p.hp > before) room.sparks.push({ x: p.x, y: p.y, r: 32, life: .55, kind: "heal" });
+  }
+  room.pickupNotice = { kind: "heal", until: room.time + 1.25 };
+}
+function activateMagnet(room, player, now) {
+  const stride = Math.max(1, Math.ceil(room.loot.length / lootRules.maxMagnetFlights));
+  let xp = 0, potions = 0, bombs = 0, arrival = 0;
+  room.loot.forEach((item, i) => {
+    const duration = R.magnetFlightDuration(gap(item, player));
+    if (item.kind === "xp") xp += item.value;
+    if (item.kind === "heal") potions++;
+    if (item.kind === "bomb") { bombs++; arrival = Math.max(arrival, duration); }
+    if (i % stride === 0 || item.kind === "bomb") {
+      room.magnetFlights.push({ x: Math.round(item.x), y: Math.round(item.y), kind: item.kind,
+        target: player.id, startedAt: Math.round(room.time * 1000) / 1000, duration: Math.round(duration * 1000) / 1000 });
+    }
+  });
+  room.loot = [];
+  room.magnetFlights = room.magnetFlights.slice(-lootRules.maxMagnetFlights);
+  room.magnetPulses.push({ target: player.id, startedAt: room.time });
+  if (bombs) room.bombBursts.push({ player, count: bombs, at: room.time + arrival });
+  sharedXP(room, xp, now);
+  healTeam(room, potions, now);
+  room.pickupNotice = { kind: "magnet", until: room.time + 1.25 };
 }
 function collect(room, living, dt, now) {
-  const magnets = new Set();
+  let magnet, xp = 0, potions = 0;
+  const bombs = new Map();
   room.loot = room.loot.filter(item => {
-    const p = item.magnet && available(item.magnet) ? item.magnet : nearest(item, living).target;
-    if (!p || (!item.magnet && gap(item, p) >= 96)) return true;
-    const d = gap(item, p), reach = item.magnet ? 1100 : item.kind === "xp" ? 330 : 240;
-    if (d > 23 + reach * dt) {
-      item.x += (p.x - item.x) * reach * dt / d; item.y += (p.y - item.y) * reach * dt / d;
+    const { target: p, distance } = nearest(item, living);
+    if (!p || distance >= lootRules.radius) return true;
+    const step = Math.min(distance, (item.kind === "xp" ? 330 : 240) * dt);
+    if (distance - step >= (item.kind === "xp" ? 22 : 25)) {
+      item.x += (p.x - item.x) * step / distance; item.y += (p.y - item.y) * step / distance;
       return true;
     }
-    if (item.kind === "xp") {
-      for (const member of room.players) if (withinGrace(member, now)) addXP(room, member, item.value);
-    } else if (item.kind === "heal") heal(p, .10);
-    else if (item.kind === "bomb") detonate(room, p, 20);
-    else magnets.add(p);
+    if (item.kind === "xp") xp += item.value;
+    else if (item.kind === "heal") potions++;
+    else if (item.kind === "bomb") bombs.set(p, (bombs.get(p) ?? 0) + 1);
+    else magnet ??= p;
     return false;
   });
-  for (const p of magnets) {
-    room.sparks.push({ x: p.x, y: p.y, r: 96, life: .65, kind: "magnet" });
-    for (const item of room.loot) item.magnet ??= p;
-  }
+  sharedXP(room, xp, now);
+  healTeam(room, potions, now);
+  for (const [p, count] of bombs) detonate(room, p, count);
+  if (magnet) activateMagnet(room, magnet, now);
+  const leaving = room.boss?.hp <= 0 && (room.floor || room.boss.at === R.storyDuration);
+  room.bombBursts = room.bombBursts.filter(burst => {
+    if (!leaving && room.time + 1e-8 < burst.at) return true;
+    detonate(room, burst.player, burst.count); return false;
+  });
+  room.magnetPulses = room.magnetPulses.filter(pulse => room.time - pulse.startedAt < lootRules.magnetPulseTime);
+  room.magnetFlights = room.magnetFlights.filter(flight => room.time - flight.startedAt < flight.duration);
 }
 function dropItem(room, e) {
-  const roll = room.random();
-  const kind = roll < .075 ? "heal" : roll < .10 ? "magnet" : roll < .15 ? "bomb" : null;
-  if (kind) room.loot.push({ x: e.x + 20, y: e.y, kind });
+  const kind = R.lootKind(room.random());
+  if (kind) room.loot.push({ id: room.nextId++, x: e.x + 20, y: e.y, kind });
 }
 function enterFloor(room, now) {
   room.floor++; room.floorKills = 0; room.floorTime = 0; room.nextSpawn = room.time + 3;
@@ -390,9 +443,10 @@ function enterFloor(room, now) {
   room.enemies = []; room.bolts = []; room.warnings = []; room.sparks = [];
   // Bank remaining shared XP while transitioning; rewards use the curve for the floor that dropped them.
   room.loot = [];
+  room.magnetFlights = []; room.magnetPulses = []; room.bombBursts = []; room.pickupNotice = null;
   for (const p of room.players) {
     p.enteredTower ||= withinGrace(p, now);
-    p.combat.reset(); p.revive = 0;
+    p.combat.reset(); p.revive = 0; p.wheelTrail = [];
     for (const skill of p.jigong) skill.castAt = null;
     Object.assign(p, from(width / 2 + (p === room.players[0] ? -1 : 1) * 40, height / 2));
     heal(p, .25);
@@ -411,7 +465,7 @@ function settle(room, now) {
     } else normalKills++;
     if (room.kills <= 5 || e.mini || room.random() < .90) {
       const seconds = room.baseline?.time ?? (room.floor ? R.storyDuration + room.towerTime : room.storyTime);
-      room.loot.push({ x: e.x, y: e.y, kind: "xp", value: R.enemyXP(seconds, room.floor, e.mini) });
+      room.loot.push({ id: room.nextId++, x: e.x, y: e.y, kind: "xp", value: R.enemyXP(seconds, room.floor, e.mini) });
     }
     dropItem(room, e);
     return false;
@@ -433,14 +487,17 @@ function settle(room, now) {
     }
     if (room.floor) room.cleared = room.floor;
     if (nextFloor) enterFloor(room, now);
-    else dropItem(room, guardian);
+    else {
+      dropItem(room, guardian);
+      room.sparks.push({ x: guardian.x, y: guardian.y, r: 30, life: 1.2, value: guardian.xp, kind: "boss-xp" });
+    }
     return;
   }
   // Keep long sessions bounded even if players leave experience on the ground.
   if (room.loot.length > 1200) {
     const overflow = room.loot.splice(0, room.loot.length - 1200);
     const xp = overflow.reduce((sum, item) => sum + (item.kind === "xp" ? item.value : 0), 0);
-    if (xp) for (const p of room.players) if (withinGrace(p, now)) addXP(room, p, xp);
+    sharedXP(room, xp, now);
   }
   room.miniKills += normalKills;
   while (room.miniKills >= room.miniThreshold) {
@@ -491,44 +548,56 @@ function pendingReward(p) {
 }
 function snapshot(room) {
   const effects = [];
-  const bolts = room.bolts.map(({ x, y, r }) => ({ x, y, r, hostile: true }));
+  const bolts = room.bolts.map(({ x, y, r, dx, dy }) => ({ x, y, r, dx, dy, hostile: true }));
   for (const p of room.players) {
     const { targetedBolts, shots, jigongShots, jigongWindCasts, bricks, ingots } = p.combat.effects();
-    for (const { x, y } of targetedBolts) bolts.push({ x, y, r: 5 });
-    for (const s of shots) if (s.lag <= 0) effects.push({ x: s.x, y: s.y, kind: s.fire ? "fire-ring" : "ring", r: 10 });
-    for (const s of jigongShots) effects.push({ x: s.x, y: s.y, kind: ["shoe", "water", "wind"][s.index], r: s.r, angle: s.angle });
-    for (const { x, y } of bricks) effects.push({ x, y, kind: "brick", r: 10 });
+    for (const { x, y, angle, basePower } of targetedBolts) bolts.push({ x, y, r: 5, angle, ...(basePower !== null ? { ingot: true } : {}) });
+    for (const s of shots) if (s.lag <= 0) effects.push({ x: s.x, y: s.y, kind: s.fire ? "fire-ring" : "ring", r: 10, angle: s.angle });
+    for (const { x, y, index, r, angle, age, evolved, returning } of jigongShots) effects.push({
+      x, y, kind: ["shoe", "water", "wind"][index], index, r, angle, age, evolved, returning
+    });
+    for (const brick of bricks) effects.push({ ...brick, kind: "brick", r: 10 });
     for (const { x, y } of ingots) effects.push({ x, y, kind: "ingot", r: 16 });
-    for (const cast of jigongWindCasts) for (const { x, y } of cast.eyes) effects.push({ x, y, kind: "eye", r: R.jigongWindRadius });
+    for (const cast of jigongWindCasts) for (const { x, y } of cast.eyes) {
+      effects.push({ x, y, kind: "eye", r: R.jigongWindRadius, startedAt: cast.startedAt });
+    }
+    for (const flame of p.wheelTrail) effects.push({ ...flame, r: 20, kind: "wheel-trail" });
     if (available(p)) for (let i = 0; i < p.wheels; i++) {
-      const theta = p.wheelAngle + i * 2 * Math.PI / p.wheels;
-      effects.push({ x: p.x + Math.cos(theta) * R.wheelOrbitRadius, y: p.y + Math.sin(theta) * R.wheelOrbitRadius,
+      effects.push({ ...wheelPoint(p, i),
         r: R.wheelHitRadius * (p.evolved[1] ? R.wheelEvolutionScale : 1), kind: p.evolved[1] ? "fire-wheel" : "wheel" });
     }
   }
   return {
     state: room.state, width, height, stage: Math.min(3, Math.floor(room.storyTime / 150) + 1),
-    time: Math.floor(room.time), storyTime: Math.floor(room.storyTime + 1e-8), kills: room.kills,
+    time: Math.floor(room.time), clock: Math.round(room.time * 1000) / 1000, storyTime: Math.floor(room.storyTime + 1e-8),
+    nextWave: room.nextWave, kills: room.kills,
     floor: room.floor, cleared: room.cleared, stageKills: room.floorKills, goal: room.floor ? R.towerGoal : 480,
     transitioning: room.time < room.graceUntil, reviveRadius, bolts,
     players: room.players.map(p => ({
       id: p.id, name: p.name, character: p.character, x: p.x, y: p.y, hp: Math.ceil(p.hp), maxHp: p.maxHp,
       xp: p.xp, needed: R.levelCost(p.level + 1, Boolean(room.floor)), level: p.level, connected: p.connected,
+      attack: p.attack, defense: p.defense, speed: p.speed, gear: p.gear, skillLevels: p.skillLevels,
+      evolved: p.evolved, skillTome: p.skillTome, qi: p.qi, ringTimer: p.ringTimer, wheelTimer: p.wheelTimer, brickTimer: p.brickTimer,
+      jigong: p.jigong.map(({ cooldown, timer }) => ({ cooldown, timer })),
       revive: p.revive / reviveSeconds, protected: room.time < p.safeUntil, tome: p.skillTome,
       moving: Boolean(p.dx || p.dy), facing: p.facing, attackFacing: p.attackFacing,
       attacking: p.attackUntil > room.time, attackAge: room.time - p.attackAt
     })),
     enemies: room.enemies.map(e => ({
       id: e.id, x: e.x, y: e.y, hp: Math.ceil(e.hp), maxHp: e.maxHp, radius: e.r, guardian: Boolean(e.guardian),
-      name: e.name, kind: e.mini ? "mini" : e.kind, color: e.color, flash: e.flash > 0, phase: e.phase,
-      healed: e.healFlashUntil > room.time, aim: e.aim ? { dx: e.aim.dx, dy: e.aim.dy, range: e.aim.profile.range,
+      name: e.name, kind: e.mini ? "mini" : e.kind, color: e.color, flash: e.flash > 0, phase: e.phase, facing: e.facing,
+      ...(e.guardian ? { casting: e.castAt - room.time < .28, pressure: clamp((room.time - e.start - 25) / 50, 0, 1) } : {}),
+      ...(e.stun > 0 ? { stun: true } : {}), jigongSlowUntil: e.jigongSlowUntil, jigongWaterUntil: e.jigongWaterUntil,
+      healFlashUntil: e.healFlashUntil, aim: e.aim ? { dx: e.aim.dx, dy: e.aim.dy, range: e.aim.profile.range + 24 + Math.min(12, e.r),
         ...(e.aim.profile.seal ? { seal: { x: e.aim.x, y: e.aim.y, r: e.aim.profile.radius } } : {}),
         charge: clamp((room.time - e.aim.start) / (e.aim.until - e.aim.start), 0, 1) } : null
     })),
     warnings: room.warnings.map(({ marks, start, until, name }) => ({
       marks, name, charge: clamp((room.time - start) / (until - start), 0, 1)
     })),
-    loot: room.loot.map(({ x, y, kind, magnet }) => ({ x: Math.round(x), y: Math.round(y), kind, ...(magnet ? { magnet: true } : {}) })),
+    loot: room.loot.map(({ id, x, y, kind }) => ({ id, x: Math.round(x), y: Math.round(y), kind })),
+    magnetFlights: room.magnetFlights, magnetPulses: room.magnetPulses,
+    pickupNotice: room.pickupNotice?.until > room.time ? room.pickupNotice : null,
     effects, sparks: room.sparks.slice(-90)
   };
 }

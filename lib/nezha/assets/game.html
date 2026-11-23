@@ -4,176 +4,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>神明Q仙傳｜神明便利貼</title>
 <link rel="preload" as="image" href="/games/nezha/nezha-sheet.png" fetchpriority="high">
-<style>
-:root{color-scheme:dark;--night:#101d25;--panel:#1c3038;--line:#526668;--ink:#fff3dc;--muted:#ced6c9;--gold:#ffcf77;--red:#d96c52;--mint:#8ad4b5}
-*{box-sizing:border-box}
-[hidden]{display:none!important}
-body{margin:0;background:var(--night);color:var(--ink);font:16px system-ui,sans-serif}
-html.playing,html.playing body{overflow:hidden;overscroll-behavior:none}
-html.playing body{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-main{height:100vh;height:100svh;max-width:1320px;margin:auto;display:flex;flex-direction:column;padding:16px 22px;gap:10px}
-header,footer{display:flex;justify-content:space-between;align-items:center;gap:8px}
-header a{text-decoration:none}header small{display:block;color:var(--gold);font-size:12px}
-header strong{display:block;white-space:nowrap;font-size:24px}
-button{font:inherit;font-weight:800;border:2px solid #141f26;border-radius:4px;background:var(--gold);color:#331e22;padding:8px 13px;cursor:pointer;box-shadow:0 3px #a45d42}
-button:hover:enabled{background:#ffe0a1}button:disabled{opacity:.55;cursor:default}
-button:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid white;outline-offset:3px}
-.account{display:flex;justify-content:flex-end;align-items:center;gap:8px;min-width:0;font-size:14px}
-.account button{flex-shrink:0;padding:5px 9px}.account #nickname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
-.field{position:relative;overflow:hidden;flex:1;min-height:0;border:2px solid #b78d59;border-radius:4px;background:#34454a;box-shadow:0 0 0 2px #0a151d}
-canvas{width:100%;height:100%;display:block;touch-action:none;image-rendering:pixelated}
-#arena{position:absolute;inset:0}
-#player-sprite{position:absolute;left:0;top:0;width:148px;height:148px;pointer-events:none}
-.hud{pointer-events:none;position:absolute;top:12px;inset-inline:12px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:start;gap:5px;font-weight:800}
-.hud span,.stats,.bossbar,.wave{background:#17252ff2;border:1px solid #9d8062;border-radius:2px}
-.hud span{padding:6px 10px;font-size:14px;white-space:nowrap}.hud #level{justify-self:end}
-.stats{justify-self:start;display:grid;grid-template-columns:auto auto;gap:2px 6px;margin:0;padding:6px 8px;font-size:12px}
-.stats dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}.stats dd:first-of-type{color:var(--mint)}
-.wave{position:absolute;top:49px;right:12px;padding:4px 6px;color:#ffe4ac;font-size:12px;font-weight:800;pointer-events:none}
-.wave-warning{border-color:var(--red);background:#392626;color:var(--ink)}
-.bossbar{position:absolute;top:101px;left:50%;transform:translateX(-50%);width:min(320px,82%);text-align:center;padding:5px 10px;font-weight:800;font-size:14px;pointer-events:none}
-progress{appearance:none;border:0;border-radius:0;background:#0c1922;color:var(--gold)}
-progress::-webkit-progress-bar{background:#0c1922}progress::-webkit-progress-value{background:var(--fill,var(--gold))}
-progress::-moz-progress-bar{background:var(--fill,var(--gold))}
-.bossbar progress{display:block;width:100%;height:8px;margin-top:4px;--fill:#f07c61}
-.field>#xp{position:absolute;left:10px;bottom:10px;width:calc(100% - 20px);height:8px;--fill:var(--mint);pointer-events:none}
-.overlay{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;display:grid;place-items:center;background:#0e1925a6;padding:10px}
-.card{width:min(430px,100%);padding:21px;text-align:center;background:#21343b;color:var(--ink);border:2px solid #e5ab65;box-shadow:0 0 0 3px #162126,0 8px #101b22;border-radius:4px;overflow-wrap:anywhere}
-.card h1{font-size:29px;line-height:1.15;margin:4px 0 10px;color:var(--gold)}
-.card p{line-height:1.5;margin:7px 0 12px;font-size:14px;color:#e3e7d8}
-.card .portrait{width:96px;height:96px;margin:auto}
-.card .portrait:not([data-loaded]){visibility:hidden}
-.actions{display:grid;gap:7px}.actions button{width:100%;text-align:left;padding:7px 10px}
-.card:has(.level-up-actions){width:min(660px,100%)}
-.level-up-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
-.level-up-actions button{min-width:0;min-height:44px;font-size:14px;line-height:1.3}
-.skills{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.skill{min-width:0;background:var(--panel);border:1px solid var(--line);border-top:2px solid var(--red);padding:6px 8px}
-.skill:first-child{border-top-color:#71d8ff}.skill:nth-child(3){border-top-color:var(--gold)}.skill:nth-child(4){border-top-color:var(--mint)}
-.skill:first-child progress{--fill:#71d8ff}
-.skill strong,.skill small{display:block;line-height:1.25;overflow-wrap:anywhere}
-.skill strong{font-size:14px}.skill small{margin-top:2px;color:var(--muted);font-size:12px}
-.skill progress{display:block;width:100%;height:4px;margin-top:4px}
-#gear,.hint{font-size:12px;color:var(--muted)}
-.hint{flex-wrap:wrap}.hint #score{font-variant-numeric:tabular-nums}
-.xp-summary{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
-#spendXP{inline-size:88px;flex-shrink:0;padding:5px 6px;white-space:nowrap}
-#spendXP:disabled{visibility:hidden}
-.ranking{max-height:25vh;max-height:25svh;overflow:auto;text-align:left;padding-left:28px}
-.ranking li{padding:4px;overflow-wrap:anywhere}
-.ranking-message{display:block;color:#ffd389;white-space:pre-wrap;font-size:14px}
-.ranking-editor{display:grid;gap:6px;margin:10px 0;text-align:left}
-.ranking-editor label,.card [role=status]{font-weight:700;font-size:14px}
-.ranking-editor textarea{width:100%;min-height:56px;resize:vertical;padding:6px 8px;border:1px solid #a38b66;border-radius:3px;background:#152931;color:var(--ink);font:inherit}
-.ranking-editor button{justify-self:start;padding:5px 12px}
-html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!important}
-html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
-.card.lobby-hub{width:min(650px,100%);height:min(550px,100%);display:flex;flex-direction:column;text-align:left}
-.lobby-hub>.actions,.lobby-nav{flex:none}
-#lobby-tower-start{background:#263c43;color:var(--gold);border-color:#ad8d5e}
-.lobby-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(62px,1fr));gap:5px;margin:12px 0;border-bottom:1px solid var(--line)}
-.lobby-nav button{min-width:0;min-height:40px;padding:6px 2px;background:transparent;color:var(--muted);border:0;border-bottom:3px solid transparent;box-shadow:none;font-size:14px}
-.lobby-nav button:hover:enabled{background:#29434a;color:var(--ink)}
-.lobby-nav button[aria-current]{border-bottom-color:var(--gold);color:var(--gold);background:#263c43}
-.lobby-view{flex:1;min-height:0;overflow:auto;padding:2px 0;margin-bottom:12px}
-.lobby-view h2{margin:0 0 9px;font-size:19px;color:var(--ink)}
-.lobby-view h3{margin:8px 0 0;font-size:14px;color:var(--muted)}
-.lobby-view .ranking{margin-bottom:0}
-.lobby-hero{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:16px;padding:8px 0}
-.lobby-hero h2{margin-bottom:4px}.lobby-hero p{margin:0}
-.lobby-hero .run-status{color:var(--gold);font-weight:700}
-.lobby-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:7px 0 0}
-.lobby-stats div{min-width:0;padding:7px 4px;border-top:1px solid var(--line);background:#152931;text-align:center}
-.lobby-stats dt{font-size:12px;color:var(--muted)}.lobby-stats dd{margin:4px 0 0;font-weight:800;font-variant-numeric:tabular-nums}
-.character-roster{display:grid;gap:4px;margin-top:8px}.character-choice{border-top:1px solid var(--line)}
-.character-choice button{margin-top:7px;font-size:14px}.character-choice .character-art{position:relative}
-.character-choice .portrait{width:80px;height:80px}.character-feedback:empty{display:none}
-.character-art.is-locked .portrait{filter:brightness(0) opacity(.6)}
-.character-art.is-locked::after{content:'?';position:absolute;inset:0;display:grid;place-items:center;color:var(--gold);font-size:31px;font-weight:800}
-.update-log{width:min(530px,calc(100% - 26px));max-height:85vh;max-height:85svh;overflow:auto;color:var(--ink);background:#21343b;border:2px solid #e5ab65;border-radius:4px;padding:0 16px 16px;text-align:left}
-.update-log::backdrop{background:#0e1925bb}.update-log header{position:sticky;top:0;z-index:1;background:#21343b;padding:12px 0;border-bottom:1px solid var(--line)}
-.update-log h2{font-size:21px;margin:0;color:var(--gold)}.update-log h3{font-size:16px;margin:14px 0 4px}.update-log time{color:var(--muted);font-size:13px}
-.update-log ul{padding-left:21px;margin:8px 0;font-size:14px;line-height:1.55}.update-log li+li{margin-top:6px}
-.unlock-toast{position:absolute;z-index:1;top:18%;left:50%;transform:translateX(-50%);max-width:90%;padding:7px 12px;background:#17252f;color:var(--gold);border:1px solid var(--gold);text-align:center;pointer-events:none;font-size:14px;font-weight:800}
-html.lobby .unlock-toast{display:none}
-.lobby-view.lobby-chat-view,.lobby-room{display:flex;flex-direction:column}
-.lobby-room{flex:1;min-height:0;gap:8px}
-.lobby-log{flex:1;min-height:48px;overflow:auto;overscroll-behavior:contain;margin:0;padding:0 12px;list-style:none;background:#152931;border:1px solid var(--line);border-radius:4px}
-.lobby-log li{padding:9px 0;border-bottom:1px solid #52666880;overflow-wrap:anywhere}
-.lobby-log li:last-child{border-bottom:none}
-.lobby-meta{display:flex;align-items:baseline;justify-content:space-between;gap:8px;color:var(--gold);font-size:13px}
-.lobby-meta time{flex-shrink:0;color:var(--muted);font-size:12px}
-.lobby-log span{display:block;margin-top:3px;line-height:1.45;font-size:14px}
-.lobby-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}
-.lobby-form input{width:100%;min-width:0;border:1px solid var(--line);border-radius:4px;padding:8px;background:#152931;color:var(--ink);font:inherit}
-.lobby-form input:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
-.lobby-panels{display:flex;flex:1;min-height:0;flex-direction:column}
-.lobby-social-rail{margin:0 0 9px;padding:8px;border:1px solid var(--line);border-radius:4px;background:#152931}
-.lobby-social-rail h2{font-size:15px;margin:0 0 5px;color:var(--gold)}
-.card .lobby-social-rail p{margin:4px 0;font-size:12px;line-height:1.35}
-.card .party-member .portrait{width:36px;height:36px}
-.party-members{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.party-member{display:flex;align-items:center;gap:4px;min-width:0;overflow-wrap:anywhere}
-.party-member .portrait{flex:none}.party-member strong,.party-member small{display:block;font-size:12px}
-.social-actions{display:flex;flex-wrap:wrap;gap:6px}
-.social-actions button{padding:4px 8px;font-size:13px}
-.social-channels{display:flex;flex:none;gap:6px;margin-bottom:6px}
-.social-channels button{font-size:13px;padding:5px 8px;background:#152931;color:var(--muted);box-shadow:none}
-.social-channels button[aria-pressed=true]{border-color:var(--gold);color:var(--gold)}
-.player-action{padding:3px 0;min-width:0;overflow-wrap:anywhere;background:none;color:var(--gold);border:0;box-shadow:none;font:inherit;font-weight:700;text-align:start}
-.player-action:hover:enabled{box-shadow:none;text-decoration:underline;background:none;color:var(--gold)}
-.social-dialog .actions{margin:10px 0}
-.social-list{list-style:none;margin:4px 0 12px;padding:0}
-.social-list li{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px 10px;padding:7px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
-.social-field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
-.social-release{color:var(--muted);font-size:12px;margin:2px 0}
-.social-status:empty{display:none}
-.whisper-target button{font-size:12px;padding:2px 7px}
-.whisper-report{padding:2px 5px;margin-inline-start:7px;font-size:12px;box-shadow:none;vertical-align:baseline}
-.social-dialog select{width:100%;font:inherit;border:1px solid var(--line);border-radius:4px;padding:7px;color:var(--ink);background:#152931}
-@media(min-width:850px),(min-width:540px) and (max-height:470px){
-  .lobby-panels.with-party{display:grid;grid-template-columns:minmax(0,1fr) 185px;gap:12px}
-  .lobby-panels.with-party .lobby-social-rail{align-self:start}
-  .lobby-panels.with-party .party-members{grid-template-columns:1fr}
-}
-@media(max-width:560px){
-  .card.lobby-hub:has(.with-party){height:100%}
-  .lobby-hub:has(.with-party) .lobby-nav{margin:5px 0}
-  .lobby-panels.with-party .lobby-chat-view:has(.social-channels)>h2{
-    position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%)
-  }
-  .lobby-social-rail{margin-bottom:5px;padding:5px}
-  .lobby-social-rail h2{margin-bottom:2px;font-size:13px}
-  .lobby-social-rail .social-actions button{padding:3px 6px}
-  .card .party-member .portrait{width:28px;height:28px}
-}
-.lobby-room [role=status]:empty{display:none}
-@media(max-width:560px){
-  main{padding:8px;gap:6px}header strong{font-size:18px}.account{gap:4px;font-size:12px}
-  .hud{inset-inline:6px;top:6px;grid-template-columns:minmax(0,max-content) 1fr auto}
-  .hud #clock{justify-self:center}.hud span,.stats{padding:4px;font-size:11px}
-  .wave{top:35px;right:6px;font-size:10px}.bossbar{top:75px}
-  .card{padding:13px}.card h1{font-size:23px}.skill{padding:4px}.skill strong{font-size:12px}
-  .level-up-actions{gap:5px}.level-up-actions button{padding:5px 6px;font-size:12px}
-  .hint .controls{display:none}
-}
-@media(max-width:420px){
-  .skills{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
-}
-@media(max-height:470px){
-  main{padding-block:5px;gap:4px}
-  .card{padding:10px}.card h1{font-size:21px;margin:2px 0 5px}
-  .card .portrait{width:56px;height:56px}.card p{margin:4px 0 6px}
-  .card:has(.tome-actions) .portrait{display:none}
-  .tome-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .tome-actions button:first-child{grid-column:1/-1}
-  #gear,.hint .controls{display:none}
-}
-@media(min-width:540px) and (max-height:470px){
-  .level-up-actions{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
-  .level-up-actions button{padding:5px 6px;font-size:12px;line-height:1.25}
-}
-</style>
+<link rel="stylesheet" href="/games/nezha/battle-ui.css">
 <main>
 <header><div><a href="/" style="color:inherit"><small>神明便利貼</small></a><strong>神明Q仙傳</strong></div><div class="account"><span id="nickname"></span><button id="updates" type="button" aria-haspopup="dialog">更新日誌</button><button id="logout">登出</button><button id="pause" disabled>暫停</button></div></header>
 <div class="field">
@@ -204,10 +35,12 @@ html.lobby .unlock-toast{display:none}
 <script src="/games/nezha/battle-rules.js"></script>
 <script src="/games/nezha/battle-combat.js"></script>
 <script src="/games/nezha/enemy-art.js"></script>
+<script src="/games/nezha/battle-ui.js"></script>
 <script src="/games/nezha/social.js"></script>
 <script>
 const canvas = document.querySelector('#arena');
 const ctx = canvas.getContext('2d');
+const combatArt=NezhaCombatArt.create(ctx);
 const playerSprite=document.querySelector('#player-sprite');
 const spriteCtx=playerSprite.getContext('2d');
 const unlockToast=document.querySelector('#unlock-toast');
@@ -253,19 +86,12 @@ const mapWidth = 2880;
 const mapHeight = 2160;
 const {wheelOrbitRadius,wheelHitRadius,wheelEvolutionScale,wheelKnockbackCooldown,
   bossStages,normalSkillLimit,baseStats,miniTypes,rangedAttacks,patterns,jigongSpecs,skillNames,
-  ringCooldown,ringExplosionLife,brickCooldown,wheelCooldown,jigongWindRadius,
-  maxMoveSpeed,attackGainPerLevel,defenseGainPerLevel,milestoneLevels}=NezhaRules;
-const tileWidth = 48;
-const pickupRadius = 2 * tileWidth;
-const bombKillLimit = 20;
-const bombFlashTime = .4;
-const magnetFlightTime = .9;
-const magnetPulseTime = .55;
-const maxMagnetFlights = 180;
+  ringExplosionLife,wheelCooldown,jigongWindRadius,
+  attackGainPerLevel,defenseGainPerLevel,milestoneLevels}=NezhaRules;
+const {radius:pickupRadius,bombKillLimit,bombFlashTime,magnetFlightTime,magnetPulseTime,maxMagnetFlights}=NezhaRules.loot;
 const skillTomeChance=.005;
 const {towerBaselineFloor,towerFloorGrowth,towerHealthBoost,towerDamageBoost,towerGuardians,towerGoal,storyWaves}=NezhaRules;
 const storyMobLimit=80;
-const waveWarningTime=4;
 const projectilePlayerRadius=12;
 const towerStartLevel=50,towerStartUpgrades=50,towerStartRewards=25;
 let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline;
@@ -599,7 +425,6 @@ function enemyXP(enemy){
   return NezhaRules.enemyXP(towerBaseline?.time??challengeTime(),towerFloor,enemy.mini);
 }
 const activeSkillNames=()=>NezhaRules.activeSkills(player);
-const activeSkillName=index=>NezhaRules.activeName(player,index);
 const learnedSkillCount=()=>player.skillLevels.filter(Boolean).length;
 function chooseSkill(index,resume=()=>setMode('play')){
   if(player.skillLevels[index]||!NezhaRules.hasSlot(player))return;
@@ -1175,8 +1000,7 @@ function dropLoot(enemy,value){
   dropItem(enemy);
 }
 function dropItem(enemy){
-  const roll=Math.random();
-  const kind=roll<.075?'heal':roll<.10?'magnet':roll<.15?'bomb':null;
+  const kind=NezhaRules.lootKind(Math.random());
   if(kind)drops.push({x:enemy.x+20,y:enemy.y,kind});
 }
 function healEnemyAllies(enemy,allies){
@@ -1271,7 +1095,7 @@ function activateMagnet(){
   function launch(item,kind){
     const visible=index++%stride===0;
     if(!visible&&kind!=='bomb')return;
-    const duration=.35+(magnetFlightTime-.35)*Math.min(distance(item,player)/1200,1);
+    const duration=NezhaRules.magnetFlightDuration(distance(item,player));
     if(kind==='bomb'){
       bombCount++;
       bombArrival=Math.max(bombArrival,duration);
@@ -1281,7 +1105,7 @@ function activateMagnet(){
     flights.push({x:item.x,y:item.y,kind,startedAt:elapsed,duration});
   }
   for(const star of stars){launch(star,'xp');player.xp+=star.value;}
-  for(const drop of drops){launch(drop,drop.kind);if(drop.kind==='heal')heal(.10);}
+  for(const drop of drops){launch(drop,drop.kind);if(drop.kind==='heal')heal(NezhaRules.loot.healFraction);}
   stars=[];drops=[];
   // Keep the reward window bounded even when multiple magnets are picked up in quick succession.
   const previous=magnetEffect;
@@ -1322,7 +1146,7 @@ function collectLoot(dt){
     attract(drop,dt,pickupRadius,240);
     if(distance(drop,player)>=25)return true;
     if(drop.kind==='magnet')magnetCollected=true;
-    else if(drop.kind==='heal')heal(.10);
+    else if(drop.kind==='heal')heal(NezhaRules.loot.healFraction);
     else if(drop.kind==='bomb')bombs++;
     return false;
   });
@@ -1596,225 +1420,37 @@ function drawPlayerSprite(pose,x,y,facing){
     playerSprite.style.transform='translate('+left/spriteDensity+'px,'+top/spriteDensity+'px)';
   }
 }
-const sprites=new Map();
-function sprite(key,w,h,paint){
-  if(sprites.has(key))return sprites.get(key);
-  const pic=document.createElement('canvas');
-  pic.width=w;pic.height=h;
-  paint(pic.getContext('2d'));
-  sprites.set(key,pic);
-  return pic;
-}
-function drawActorSprite(pic,x,y,scale,flip=false){
-  const w=pic.width*scale,h=pic.height*scale;
-  ctx.save();ctx.translate(Math.round(x),Math.round(y));
-  if(flip)ctx.scale(-1,1);
-  ctx.drawImage(pic,-w/2,-h+4,w,h);
-  ctx.restore();
-}
 function background(){
-  const block=(color,x,y,w,h)=>pixel(ctx,color,x,y,w,h);
-  block('#263c42',view.x,view.y,view.width,view.height);
-  const tiles=['#435c60','#486369','#40585d'];
-  const stone=['#637775','#596e6c','#687975'];
-  for(let row=Math.max(0,Math.floor(view.y/32));row*32<=view.y+view.height&&row*32<mapHeight;row++){
-    for(let col=Math.max(0,Math.floor(view.x/tileWidth));col*tileWidth<=view.x+view.width&&col*tileWidth<mapWidth;col++){
-      const x=col*tileWidth,y=row*32,seed=(row*17+col*13)%19;
-      const lane=Math.abs(x-mapWidth/2)<150||Math.abs(y-mapHeight/2)<104;
-      block((lane?stone:tiles)[seed%3],x,y,46,30);
-      block(lane?'#83918a':'#597378',x,y,46,2);
-      block('#30464b',x+2,y+28,42,2);
-      if(seed<4){block('#334e53',x+14,y+8,10,2);block('#334e53',x+22,y+10,2,6);}
-      if(seed>15){block('#395756',x+6,y+20,8,6);block('#5c7770',x+8,y+18,4,2);}
-    }
-  }
-  ctx.strokeStyle='#aa8054';ctx.lineWidth=6;ctx.strokeRect(8,8,mapWidth-16,mapHeight-16);
-  const flame=Math.floor(elapsed*5)%2;
-  for(let x=240;x<mapWidth;x+=480)for(let y=210;y<mapHeight;y+=420){
-    if(x<view.x-110||x>view.x+view.width+110||y<view.y-110||y>view.y+view.height+110)continue;
-    block('#31484d',x-47,y-39,94,82);block('#9a805b',x-45,y-37,90,78);
-    block('#657771',x-40,y-32,80,68);block('#87918a',x-34,y-26,68,56);
-    block('#6a6c58',x-4,y-20,8,40);block('#6a6c58',x-20,y-4,40,8);
-    block('#b79a68',x-9,y-9,18,18);block('#7a5d4c',x-4,y-4,8,8);
-    for(const offset of [-55,55]){
-      const cx=x+offset;
-      block('#25363c',cx-8,y-5,16,9);block('#32292a',cx-3,y-34,6,34);
-      block('#a9473c',cx-9,y-31,18,20);block('#e9834f',cx-7,y-32,14,18);
-      block(flame?'#ffe0a2':'#ffc474',cx-3,y-29,6,12);
-      block('#ffc66b',cx-6,y-35,12,3);block('#ffc66b',cx-6,y-14,12,3);
-      block('#a9473c',cx-1,y-11,2,5);
-    }
-  }
+  NezhaWorldArt.background(ctx,view,mapWidth,mapHeight,elapsed);
 }
 function ghost(enemy){
-  const kind=enemy===boss?(enemy.at===rounds||towerFloor?'dragon':'boss'):enemy.mini?'mini':enemy.kind??'shade';
-  const casting=Boolean(enemy.aim)||(enemy===boss&&enemy.cast<.28);
-  const frame=casting?1:Math.floor(elapsed*7+(enemy.phase??0))%2;
-  const y=Math.round(enemy.y)+(enemy.stun>0?0:frame*3);
-  const color=enemy.flash>0?'#fff4bd':enemy.color??enemyColors[kind];
-  const pic=sprite(kind+':'+color+':'+frame,24,24,layer=>paintEnemy(layer,kind,frame,color));
-  const scale=enemy===boss?4:enemy.mini?2.5:kind==='guard'?1.85:1.55;
-  pixel(ctx,'#20313688',Math.round(enemy.x-enemy.r/2),Math.round(y),enemy.r,5);
-  drawActorSprite(pic,enemy.x,y+enemy.r*.68,scale,enemy.facing<0);
-  if(elapsed<(enemy.jigongSlowUntil??0)){
-    pixel(ctx,'#5bc9df',Math.round(enemy.x-enemy.r),Math.round(enemy.y)+7,9,3);
-    pixel(ctx,'#bbf6ff',Math.round(enemy.x+enemy.r)-8,Math.round(enemy.y)+9,6,3);
-  }
-  if(elapsed<(enemy.jigongWaterUntil??0)){
-    const drop=Math.floor(elapsed*13+(enemy.phase??0))%8;
-    pixel(ctx,'#75cfee',Math.round(enemy.x-enemy.r/2),Math.round(y)+drop,3,5);
-    pixel(ctx,'#b5effc',Math.round(enemy.x+enemy.r/2),Math.round(y)+7-drop,3,4);
-  }
-  if(casting){
-    pixel(ctx,'#f18b54',enemy.x-4,y-enemy.r-14,8,8);
-    pixel(ctx,'#ffe69a',enemy.x-2,y-enemy.r-16,4,12);
-  }
-  if(enemy.healFlashUntil>elapsed||enemy.stun>0){
-    const ink=enemy.stun>0?'#ffd879':'#94ebac';
-    pixel(ctx,ink,enemy.x-2,y-enemy.r-17,4,10);
-    pixel(ctx,ink,enemy.x-5,y-enemy.r-14,10,4);
-  }
-  if(enemy.mini){
-    ctx.font='bold 13px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';
-    ctx.fillStyle='#fff1db';ctx.fillText(enemy.name,enemy.x,y-enemy.r-15);
-  }
-  if(enemy!==boss&&enemy.hp<enemy.maxHp){
-    pixel(ctx,'#283237',enemy.x-enemy.r,y-enemy.r-9,enemy.r*2,4);
-    pixel(ctx,'#f09c7e',enemy.x-enemy.r,y-enemy.r-9,enemy.r*2*Math.max(0,enemy.hp/enemy.maxHp),4);
-  }
+  const isBoss=enemy===boss;
+  const kind=isBoss?(enemy.at===rounds||towerFloor?'dragon':'boss'):enemy.mini?'mini':enemy.kind??'shade';
+  combatArt.enemyActor(enemy,elapsed,kind,isBoss);
 }
-function drawIngot(x,y){
-  ctx.beginPath();ctx.moveTo(x-18,y-7);
-  ctx.quadraticCurveTo(x,y+1,x+18,y-7);
-  ctx.quadraticCurveTo(x+15,y+13,x,y+11);
-  ctx.quadraticCurveTo(x-15,y+13,x-18,y-7);
-  ctx.fillStyle='#ffc64c';ctx.fill();
-  ctx.lineWidth=2;ctx.strokeStyle='#754344';ctx.stroke();
-  circle(x,y-3,7,'#ffe899','#a36646',1.5);
-}
-function drawXpGem(x,y){
-  pixel(ctx,'#625450',x-5,y-3,10,7);
-  pixel(ctx,'#ffcb65',x-3,y-5,6,10);
-  pixel(ctx,'#ffe5a0',x-1,y-4,2,5);
-}
-function drawLootDrop(x,y,kind){
-  if(kind==='bomb'){
-    circle(x,y,13,'#b45745','#382b39',3);
-    circle(x,y+1,6,'#29343f','#ffe0a1',1.5);
-    pixel(ctx,'#ffd47b',x+3,y-8,2,4);pixel(ctx,'#fff0aa',x+5,y-10,3,3);
-    return;
-  }
-  const isHeal=kind==='heal';
-  circle(x,y,13,isHeal?'#ef6d91':'#71d8ff','#3c2a54',3);
-  ctx.fillStyle='#251637';ctx.font='bold 15px system-ui';
-  ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(isHeal?'+':'磁',x,y);
-}
+function drawIngot(x,y){combatArt.ingot(x,y);}
+function drawXpGem(x,y){NezhaWorldArt.gem(ctx,x,y);}
+function drawLootDrop(x,y,kind){NezhaWorldArt.drop(ctx,x,y,kind);}
 function drawMagnetPull(){
-  if(!magnetEffect)return;
-  const age=elapsed-magnetEffect.startedAt;
-  ctx.save();
-  for(const delay of [0,.12]){
-    const t=(age-delay)/(magnetPulseTime-delay);
-    if(t<0||t>=1)continue;
-    ctx.globalAlpha=(1-t)*.85;
-    circle(player.x,player.y,24+142*t,null,'#71d8ff',4-2*t);
-  }
-  for(const item of magnetEffect.flights){
-    const t=(elapsed-item.startedAt)/item.duration;
-    if(t>=1)continue;
-    const remaining=(1-t)**2;
-    const dx=item.x-player.x,dy=item.y-player.y;
-    const x=player.x+dx*remaining,y=player.y+dy*remaining;
-    if(x<view.x-24||x>view.x+view.width+24||y<view.y-24||y>view.y+view.height+24)continue;
-    const tail=(1-Math.max(0,t-.075))**2;
-    ctx.globalAlpha=(1-t*.55)*.75;
-    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(player.x+dx*tail,player.y+dy*tail);
-    ctx.strokeStyle=item.kind==='xp'?'#ffdc88':item.kind==='heal'?'#ff97b0':item.kind==='bomb'?'#ffae68':'#71d8ff';
-    ctx.lineWidth=item.kind==='xp'?3:5;ctx.stroke();
-    ctx.globalAlpha=1-t*.55;
-    if(item.kind==='xp')drawXpGem(x,y);
-    else drawLootDrop(x,y,item.kind);
-  }
-  ctx.restore();
+  if(magnetEffect)NezhaWorldArt.magnet(ctx,view,elapsed,[magnetEffect],magnetEffect.flights,()=>player,magnetPulseTime);
 }
-function drawTargetedBolt(bolt){
-  ctx.save();ctx.translate(bolt.x,bolt.y);ctx.rotate(bolt.angle);
-  if(bolt.basePower!==null){
-    pixel(ctx,'#ffd16890',-17,-2,15,4);
-    circle(0,0,6,'#ffc354','#754637',2);
-    pixel(ctx,'#fff3b4',-2,-2,4,4);
-    ctx.restore();return;
-  }
-  pixel(ctx,'#77e9bc78',-24,-2,18,4);
-  ctx.beginPath();ctx.moveTo(-7,-12);ctx.quadraticCurveTo(28,0,-7,12);
-  ctx.quadraticCurveTo(12,0,-7,-12);ctx.closePath();
-  ctx.fillStyle='#7af0c4';ctx.fill();ctx.strokeStyle='#236776';ctx.lineWidth=2;ctx.stroke();
-  pixel(ctx,'#e9fff2',7,-2,7,4);
-  ctx.restore();
-}
-function drawGroundWarning(x,y,r,charge,seal=false){
-  circle(x,y,r,'#ec655647','#ffb082',2);
-  if(charge>0)circle(x,y,r*Math.sqrt(charge),'#ff885b55');
-  if(seal){
-    pixel(ctx,'#ffd18b',x-2,y-8,4,16);
-    pixel(ctx,'#ffd18b',x-8,y-2,16,4);
-  }
-}
+function drawTargetedBolt(bolt){combatArt.qi(bolt);}
+function drawGroundWarning(x,y,r,charge,seal=false){combatArt.warning(x,y,r,charge,seal);}
 function drawEnemyAim(enemy){
-  const aim=enemy.aim;
-  const {profile}=aim;
-  const charge=clamp(1-(aim.firesAt-elapsed)/profile.windup,0,1);
-  if(profile.seal){drawGroundWarning(aim.x,aim.y,profile.radius,charge,true);return;}
-  const reach=profile.range+24+Math.min(12,enemy.r);
-  ctx.save();ctx.globalAlpha=.55+.4*charge;ctx.strokeStyle='#ffb38e';ctx.lineWidth=2;
-  ctx.setLineDash([8,6]);
-  ctx.beginPath();ctx.moveTo(enemy.x,enemy.y);
-  ctx.lineTo(enemy.x+aim.dx*reach,enemy.y+aim.dy*reach);ctx.stroke();
-  ctx.restore();
+  const {aim}=enemy,{profile}=aim;
+  combatArt.aim(enemy,{dx:aim.dx,dy:aim.dy,range:profile.range+24+Math.min(12,enemy.r),
+    charge:clamp(1-(aim.firesAt-elapsed)/profile.windup,0,1),
+    seal:profile.seal?{x:aim.x,y:aim.y,r:profile.radius}:null});
 }
-function drawEnemyShot(shot){
-  const tail=shot.radius*2;
-  circle(shot.x-shot.dx*tail,shot.y-shot.dy*tail,shot.radius*.65,'#ec6640ab');
-  circle(shot.x,shot.y,shot.radius,'#ff8e66','#4d2d31',2);
-  circle(shot.x,shot.y,shot.radius*.46,'#fff2bb');
-}
+function drawEnemyShot(shot){combatArt.enemyShot(shot);}
 function drawJigongShot(shot){
-  const {index,x,y,angle,age}=shot;
-  if(x<view.x-27||x>view.x+view.width+27||y<view.y-27||y>view.y+view.height+27)return;
-  ctx.save();ctx.translate(x,y);
-  if(index===0){
-    ctx.rotate(angle);
-    const scale=shot.r/8;
-    ctx.scale(scale,scale);
-    pixel(ctx,'#382820',-11,-5,18,9);pixel(ctx,shot.evolved?'#d5924c':'#a77a49',-9,-4,14,6);
-    pixel(ctx,'#e0bb71',-5,-4,5,5);pixel(ctx,'#ffe0a0',5,-3,4,5);pixel(ctx,'#795237',-10,4,20,3);
-    if(shot.returning)pixel(ctx,'#fff0b6',-18,-1,8,3);
-  }else if(index===1){
-    ctx.rotate(angle);
-    pixel(ctx,'#14566b',-12,-4,23,9);pixel(ctx,shot.evolved?'#63e6df':'#49c2dc',-9,-6,16,12);
-    pixel(ctx,'#b5f5f3',0,-4,10,5);pixel(ctx,'#66d7ee',-17,-1,7,3);
-  }else{
-    const shift=Math.round(Math.sin(age*23)*4);
-    pixel(ctx,'#d4ffe6',-14+shift,-10,26,4);pixel(ctx,'#8bddba',-11-shift,-5,20,4);
-    pixel(ctx,'#4ea895',-7+shift,0,14,4);pixel(ctx,'#acdcbf',-4,5,9,4);
-  }
-  ctx.restore();
+  if(shot.x>=view.x-27&&shot.x<=view.x+view.width+27&&shot.y>=view.y-27&&shot.y<=view.y+view.height+27)combatArt.jigong(shot);
 }
-function drawJigongWindEyes(jigongWindCasts){
+function drawJigongWindEyes(casts){
   const r=jigongWindRadius;
-  for(const cast of jigongWindCasts)for(const eye of cast.eyes){
-    const {x,y}=eye;
-    if(x<view.x-r||x>view.x+view.width+r||y<view.y-r||y>view.y+view.height+r)continue;
-    const age=elapsed-cast.startedAt;
-    circle(x,y,r,'#31676348','#88d8c399',2);
-    for(let arm=0;arm<2;arm++)for(let i=0;i<8;i++){
-      const angle=age*6+arm*Math.PI-i*.36;
-      const reach=6+(i*4-age*26%4);
-      const size=i<3?4:6;
-      pixel(ctx,i<3?'#d2ffe8':'#82d4be',Math.round(x+Math.cos(angle)*reach)-size/2,Math.round(y+Math.sin(angle)*reach)-2,size,4);
-    }
-  }
+  for(const cast of casts)for(const eye of cast.eyes)
+    if(eye.x>=view.x-r&&eye.x<=view.x+view.width+r&&eye.y>=view.y-r&&eye.y<=view.y+view.height+r)
+      combatArt.eye(eye,elapsed-cast.startedAt,r);
 }
 function drawPlayerHealth(){
   const w=44,h=8;
@@ -1852,38 +1488,11 @@ function draw(){
   if(boss)ghost(boss);
   for(const bolt of targetedBolts)drawTargetedBolt(bolt);
   for(const shot of jigongShots)drawJigongShot(shot);
-  for(const shot of shots)if(shot.lag<=0){
-    if(shot.fire){
-      for(let i=4;i>0;i--){
-        circle(shot.x-Math.cos(shot.angle)*i*5,shot.y-Math.sin(shot.angle)*i*5,12-i*1.8,'#fc6d4b');
-      }
-      circle(shot.x,shot.y,9,'#fff097','#ff9739',4);
-      continue;
-    }
-    circle(shot.x,shot.y,11,null,'#713e4b',7);
-    circle(shot.x,shot.y,11,null,'#ffd65e',4);
-    starShape(shot.x+8,shot.y-8,5,'#fff0ac');
-  }
+  for(const shot of shots)if(shot.lag<=0)combatArt.ring(shot);
   const wheelScale=player.wheels&&player.evolved[1]?wheelEvolutionScale:1;
-  for(const flame of wheelTrail){
-    ctx.globalAlpha=flame.life/.32;
-    circle(flame.x,flame.y,(5+flame.life*26)*wheelScale,'#ff7034');
-    circle(flame.x,flame.y,(3+flame.life*14)*wheelScale,'#ffe477');
-  }
-  ctx.globalAlpha=1;
-  for(const wheel of wheelPoints()){
-    circle(wheel.x,wheel.y,22*wheelScale,'#ff6f4d','#71354d',3);
-    circle(wheel.x,wheel.y,10*wheelScale,null,'#ffd575',4);
-    starShape(wheel.x,wheel.y,7*wheelScale,'#fff3b7');
-  }
-  for(const brick of bricks){
-    const t=clamp(1-brick.left/.44,0,1);
-    const x=brick.fromX+(brick.x-brick.fromX)*t;
-    const y=brick.fromY+(brick.y-brick.fromY)*t-Math.sin(t*Math.PI)*55;
-    if(brick.ingot){drawIngot(x,y);continue;}
-    ctx.fillStyle='#ffd169';ctx.strokeStyle='#8f5550';ctx.lineWidth=3;
-    ctx.fillRect(x-12,y-8,24,14);ctx.strokeRect(x-12,y-8,24,14);
-  }
+  for(const flame of wheelTrail)combatArt.flame(flame,wheelScale);
+  for(const wheel of wheelPoints())combatArt.wheel(wheel,wheelScale);
+  for(const brick of bricks)combatArt.brick(brick);
   drawMagnetPull();
   for(const shot of enemyShots)drawEnemyShot(shot);
   const {x,y}=player;
@@ -1911,11 +1520,7 @@ function draw(){
       starShape(spark.x,spark.y,Math.min(28,spark.r*.52)*(1+(1-fade)*.25),'#ffb96f');
       ctx.restore();
     }else if(spark.kind==='bomb'){
-      const fade=spark.life/bombFlashTime;
-      ctx.save();ctx.globalAlpha=fade;
-      starShape(spark.x,spark.y-6,16+23*(1-fade),'#ffb563');
-      starShape(spark.x,spark.y-6,7+10*(1-fade),'#fff0a3');
-      ctx.restore();
+      NezhaWorldArt.bomb(ctx,spark,bombFlashTime);
     }else if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);
     else starShape(spark.x,spark.y,8+spark.life*35,'#fff1bf');
   }
@@ -1927,144 +1532,10 @@ function draw(){
     circle(stick.x+sx*Math.min(size,25),stick.y+sy*Math.min(size,25),13,'#ffd88ed9');
   }
 }
-const health=document.querySelector('#health');
-const attack=document.querySelector('#attack');
-const defense=document.querySelector('#defense');
-const moveSpeed=document.querySelector('#moveSpeed');
-const waveHud=document.querySelector('#wave');
-const clock=document.querySelector('#clock');
-const level=document.querySelector('#level');
-const score=document.querySelector('#score');
-const spendXPButton=document.querySelector('#spendXP');
-spendXPButton.onclick=spendSavedXP;
-const xpNumber=new Intl.NumberFormat('zh-TW');
-const xp=document.querySelector('#xp');
-const bossbar=document.querySelector('#bossbar');
-const bossname=document.querySelector('#bossname');
-const bossHP=document.querySelector('#bossHP');
-const [qiSlot,...skillSlots]=[...document.querySelectorAll('.skill')].map(slot=>({
-  name:slot.querySelector('strong'),status:slot.querySelector('small'),bar:slot.querySelector('progress')
-}));
-const gear=document.querySelector('#gear');
-function drawWaveHud(){
-  let message='',warning=false;
-  if(towerFloor){
-    message=boss?'守關魔王出現':'本層擊退 '+Math.min(floorKills,towerGoal)+' / '+towerGoal;
-  }else if(!boss){
-    const wave=storyWaves[nextWave];
-    if(wave){
-      const untilWave=wave.at-time;
-      if(untilWave>0&&untilWave<=waveWarningTime){
-        warning=true;
-        message='怪潮預警・'+Math.ceil(untilWave)+' 秒';
-      }else if(untilWave<=0){
-        message=wave.name+'・'+Math.ceil(wave.duration+untilWave)+' 秒';
-      }
-    }
-  }
-  waveHud.hidden=!message;
-  waveHud.classList.toggle('wave-warning',warning);
-  if(waveHud.textContent!==message)waveHud.textContent=message;
-}
-function drawSkillHud(){
-  const qi=player.qi;
-  setText(qiSlot.name,'氣功普攻');
-  setText(qiSlot.status,'強化 '+qi.rank+' · '+qi.timer.toFixed(2)+' 秒');
-  setProgress(qiSlot.bar,1-qi.timer/qi.cooldown);
-  const jigong=player.character==='jigong';
-  const limits=jigong?player.jigong.map(skill=>skill.cooldown):[ringCooldown,wheelCooldown,brickCooldown];
-  const cooldowns=jigong?player.jigong.map(skill=>skill.timer):[player.ringTimer,player.wheelTimer,player.brickTimer];
-  const openSlot=NezhaRules.hasSlot(player);
-  skillSlots.forEach(({name,status,bar},index)=>{
-    const level=player.skillLevels[index];
-    const cooldown=Math.max(0,cooldowns[index]);
-    const title=activeSkillName(index);
-    setText(name,(index+1)+' '+title);
-    const label=title+'冷卻';
-    if(bar.getAttribute('aria-label')!==label)bar.setAttribute('aria-label',label);
-    setText(status,level?'Lv.'+level+' · '+'CD '+cooldown.toFixed(1)+' 秒':openSlot?'尚未解鎖':'需絕世寶典');
-    setProgress(bar,level?1-cooldown/limits[index]:0);
-  });
-  setText(gear,NezhaRules.gearNames.map((name,index)=>name+' Lv.'+player.gear[index]).join('　'));
-}
-function setText(element,value){
-  const text=String(value);
-  if(element.textContent!==text)element.textContent=text;
-}
-function setProgress(element,value,max=1){
-  if(element.max!==max)element.max=max;
-  const next=clamp(value,0,max);
-  if(element.value!==next||!element.hasAttribute('value'))element.value=next;
-}
-const updateHistory=[
-  {date:'2026-11-23',title:'雙人主線、共用無限塔排行與救援',changes:[
-    ['雙人闖關','兩位玩家從 8 分鐘主線出發，在第 2、5、8 分鐘挑戰魔王。擊退龍王後進入無限塔，每層擊退 1,000 隻怪物後挑戰守關魔王。'],
-    ['強化與怪物','雙人共用單人的怪物種類、氣功、法寶及進化規則。雙方共享拾取的經驗值，但各自選擇強化；小魔王仍提供神刀、神甲、神馬和大魂丹四選一。'],
-    ['救援','一方倒地後，隊友在救援範圍內停留 3 秒，可使倒地玩家恢復 30% 最大生命。離開範圍會中斷，兩人都倒地才結束。'],
-    ['無限塔魔王與榜單','單人與雙人塔王都新增天火隕落、玄冰環陣、裂地雷擊與八方震波，施放前會標出範圍。雙人通過塔層的成績會更新至原有的個人前 100 名排行榜，只覆蓋更高的通關紀錄。']
-  ]},
-  {date:'2026-11-23',title:'重大更新001・版本 0.112301',changes:[
-    ['帳號與好友','可在大廳修改暱稱，並送出、接受好友邀請；改名不會影響好友或遊戲進度。'],
-    ['密語頻道','點選玩家名稱或在電腦按右鍵可開啟互動選單。密語在獨立頻道接收，並顯示未讀提醒。'],
-    ['玩家檢舉','收到不當密語時，可單獨檢舉該則訊息。GM 不會因此取得其他私人對話。'],
-    ['排行榜留言','前 100 名玩家可隨時設定或修改自己的留言，最多 80 字，不需要提升名次。'],
-    ['雙人隊伍大廳','可邀請隊友、接受或拒絕邀請，並查看雙方角色與準備狀態。合作試玩開放時，兩人準備後即可進入同一場戰鬥。']
-  ]},
-  {date:'2026-11-23',title:'無限塔起點與高等升級調整',changes:[
-    ['無限塔起點','通過第 1 層後，帳號會記錄起點資格。新局可照常從廟埕開始，或直接從無限塔第 1 層開始。塔起點角色為 Lv.50，入場前可選 50 次升級配點及 25 次小魔王戰利品。'],
-    ['強化道具','神刀與神甲不設強化上限。神馬在移速到達 100 後停止強化。大魂丹的最大血量上限改為 1,000，到頂後每次選擇改為回復 60% 最大血量。'],
-    ['升級面板','修正無限塔累積足夠經驗值卻未自動升級，以及高等時升級選項用盡的問題。技能與氣功普攻仍維持 Lv.25 上限。']
-  ]},
-  {date:'2026-11-23',title:'濟公禪師進化法寶再強化',changes:[
-    ['開道鞋・八方神行鞋','拖鞋外觀與命中半徑調整為原版的 2 倍，進化後的來回飛行皆適用。'],
-    ['伏魔回風扇','施放時在濟公周圍留下 10 個環形颶風眼，會吸引附近敵人，對大小魔王的拉力較弱。風眼持續 6 秒，每 0.5 秒造成清新扇基礎傷害的 60%；重疊不疊傷。'],
-    ['甘露乾坤葫','水花保留原有減速，並讓目標持續 10 秒、每秒損失 3% 最大血量。再次命中會刷新持續時間，傷害不疊加。']
-  ]},
-  {date:'2026-11-23',title:'濟公禪師法寶傷害調整',changes:[
-    ['開道鞋・八方神行鞋','基礎傷害由 14 提高至 22，每次傷害強化由＋4 提高至＋6。拖鞋外觀與命中半徑放大 50%，折返傷害仍為強化後傷害的 40%。'],
-    ['葫蘆寶・甘露乾坤葫','基礎傷害由 18 提高至 24，每次傷害強化由＋5 提高至＋7。減速效果與間隔不變。'],
-    ['清新扇・伏魔回風扇','基礎傷害由 15 提高至 21，每次傷害強化由＋4 提高至＋6。風眼仍按清新扇傷害的 25% 計算，重疊不疊傷。'],
-    ['平衡','怪物血量成長、法寶冷卻和數量上限不變；三太子不受影響。']
-  ]},
-  {date:'2026-11-22',title:'濟公禪師法寶進化',changes:[
-    ['八方神行鞋','開道鞋 10 級並取得神馬後進化。鞋子飛出後沿原路折返，回程造成 40% 傷害；同一波每隻怪最多承受一次折返命中。'],
-    ['甘露乾坤葫','葫蘆寶 10 級並取得大魂丹後進化。水花讓一般怪物減速 20%，魔王減速 10%，持續 1.2 秒；同一目標每 2 秒最多觸發一次。'],
-    ['伏魔回風扇','清新扇 10 級並取得神刀後進化。每次施放最多留下 3 個風眼，持續 1.5 秒、每 0.5 秒造成 25% 傷害，重疊不疊傷。'],
-    ['平衡','三種法寶的數量上限與冷卻下限不變，三太子的進化效果也不變。']
-  ]},
-  {date:'2026-11-22',title:'大廳與排行榜管理更新',changes:[
-    ['大廳聊天','管理員可移除違規訊息或限制發言。禁言不影響閱讀聊天或遊玩，到期後可再次發送訊息。'],
-    ['排行榜','管理員可移除不當留言，玩家的排名、通過樓層與成績不受影響。'],
-    ['角色資格','帳號的角色資格更新後，重新開啟大廳「角色」即可同步。已開始的對局不會換角。']
-  ]},
-  {date:'2026-11-22',title:'濟公禪師加入廟埕',changes:[
-    ['新角色','擊敗主線超級龍王並進入無限塔第 1 層，即可解鎖濟公禪師。到大廳「角色」選擇下一局的出戰角色；暫停中的對局不會換角。'],
-    ['開道鞋','向八方射出貫穿鞋子，最多 20 隻。'],
-    ['葫蘆寶','從前、後、左、右射出貫穿水花，最多 16 個方位。'],
-    ['清新扇','扇出迴旋向外的龍捲風，最多 25 道。'],
-    ['戰鬥強化','濟公保留氣功普攻。法寶可強化傷害、數量或方位，並縮短冷卻時間。'],
-    ['遊戲介面','角色未解鎖時會以剪影顯示。右上方新增更新日誌；在遊戲中開啟時，本局會暫停。']
-  ]},
-  {date:'2026-11-22',title:'玩家大廳改版',changes:[
-    ['大廳','登入後可直接查看無限塔排行榜、聊天或查看角色。遊戲中回大廳不會清除對局進度。'],
-    ['行動裝置','廟埕支援雙指縮放，角色腳下新增即時血量條。三太子縮放時保留高解析度像素細節。']
-  ]}
-];
-for(const entry of updateHistory){
-  const section=document.createElement('section');
-  const title=document.createElement('h3');title.textContent=entry.title;
-  const date=document.createElement('time');date.dateTime=entry.date;date.textContent=entry.date.replaceAll('-','/');
-  const list=document.createElement('ul');
-  for(const [label,detail] of entry.changes){
-    const item=document.createElement('li'),heading=document.createElement('strong');heading.textContent=label+'：';
-    item.append(heading,detail);list.append(item);
-  }
-  section.append(title,date,list);document.querySelector('#update-entries').append(section);
-}
-document.querySelector('#updates').onclick=()=>{
-  if(mode==='play')togglePause();
-  if(!updateDialog.open)updateDialog.showModal();
-};
+const hud=NezhaUi.mountHud(document,NezhaRules);
+const {setText}=NezhaUi;
+hud.spend.onclick=spendSavedXP;
+NezhaUi.mountUpdateLog(document,()=>{if(mode==='play')togglePause();});
 let previous=null,framePending=false;
 function requestFrame(){
   if(framePending)return;
@@ -2082,27 +1553,10 @@ function frame(now){
   const unlocked=unlockToastUntil>elapsed;
   if(unlockToast.hidden===unlocked)unlockToast.hidden=!unlocked;
   if(mode==='lobby')return;
-  drawSkillHud();
-  setText(health,Math.ceil(player.hp)+'/'+player.maxHp);
-  setText(attack,Math.round(player.attack*100)/100);
-  setText(defense,Math.round(player.defense*100)/100);
-  setText(moveSpeed,player.speed+'/'+maxMoveSpeed);
-  drawWaveHud();
-  setText(clock,towerFloor?'無限塔 '+towerFloor+' 層':formatTime(time)+(boss?' 暫停':' / '+formatTime(rounds)));
-  bossbar.hidden=!boss;
-  if(boss){
-    const pressure=bossPressure();
-    setText(bossname,boss.name+(pressure>0?' · 強化 '+Math.round(pressure*100)+'%':''));
-    setProgress(bossHP,boss.hp,boss.maxHp);
-  }
-  setText(level,'等級 '+player.level);
   const requiredXP=needed();
-  setText(score,'擊退 '+kills+' · XP '+xpNumber.format(player.xp)+' / '+xpNumber.format(requiredXP));
-  const ready=mode==='play'&&player.xp>=requiredXP?availableLevels():0;
-  if(spendXPButton.disabled!==!ready)spendXPButton.disabled=!ready;
-  const label=ready?'升級 ×'+(ready>99?'99+':ready):'升級';
-  if(spendXPButton.textContent!==label)spendXPButton.textContent=label;
-  setProgress(xp,player.xp,requiredXP);
+  hud.render({player,time,floor:towerFloor,floorKills,waveIndex:nextWave,
+    boss:boss?{name:boss.name,hp:boss.hp,maxHp:boss.maxHp,pressure:bossPressure()}:null,
+    kills,needed:requiredXP,ready:mode==='play'&&player.xp>=requiredXP?availableLevels():0});
   if(mode==='play')requestFrame();
 }
 resize();reset();setMode('loading');panel('神明Q仙傳','載入中…',[]);

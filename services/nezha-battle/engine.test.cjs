@@ -230,3 +230,79 @@ test("Jigong casts every learned relic and evolved wind, but cannot start anothe
   combat.updateSkills(.05, [target], false);
   assert.equal(combat.effects().jigongShots.length, 0);
 });
+
+test("a contested pickup credits XP once per teammate and healing is synchronized without reviving", () => {
+  const room = live(), [a, b] = room.players;
+  room.nextSpawn = Infinity;
+  b.x = a.x; b.y = a.y;
+  a.hp = 40; b.maxHp = 200; b.hp = 50;
+  room.loot.push({ id: 991, x: a.x, y: a.y, kind: "xp", value: 14 });
+  room.loot.push({ id: 992, x: a.x, y: a.y, kind: "heal" });
+  step(room, 3);
+  assert.deepEqual(room.players.map(p => [p.level, p.xp, p.hp]), [[2, 9, 50], [2, 9, 70]]);
+  assert.equal(room.loot.length, 0);
+  assert.equal(snapshot(room).sparks.filter(s => s.kind === "heal").length, 2);
+  b.hp = 0;
+  room.loot.push({ id: 993, x: a.x, y: a.y, kind: "heal" });
+  step(room);
+  assert.equal(a.hp, 60);
+  assert.equal(b.hp, 0);
+});
+
+test("one magnet pulls every pickup type for both players and remote bombs use the normal kill credits", () => {
+  const room = live(() => 0), [a, b] = room.players;
+  room.nextSpawn = Infinity; room.storyTime = 120;
+  for (const p of room.players) { p.hp = 50; p.qi.timer = 9; }
+  step(room);
+  const boss = room.boss;
+  for (let i = 0; i < 24; i++) {
+    room.enemies.push({ id: 200 + i, x: 240, y: 200 + i * 40, hp: 100, maxHp: 100, attack: 8, r: 13,
+      speed: 0, kind: "shade", mini: i === 0, stun: 0, flash: 0, contact: new Map(), wheels: new Map(), rangedReadyAt: Infinity });
+  }
+  b.x = 2000; b.y = 1500;
+  room.loot.push({ id: 1000, x: a.x, y: a.y, kind: "magnet" },
+    { id: 1001, x: 100, y: 100, kind: "xp", value: 19 },
+    { id: 1002, x: 200, y: 100, kind: "heal" },
+    { id: 1003, x: 300, y: 100, kind: "bomb" },
+    { id: 1004, x: 400, y: 100, kind: "magnet" });
+  step(room);
+  const first = snapshot(room);
+  assert.deepEqual(first.players.map(p => [p.xp, p.hp]), [[14, 60], [14, 60]]);
+  assert.equal(first.loot.length, 0);
+  assert.equal(first.magnetPulses.length, 1);
+  assert.deepEqual(first.magnetFlights.map(f => [f.kind, f.target]), [["xp", a.id], ["heal", a.id], ["bomb", a.id], ["magnet", a.id]]);
+  assert.equal(first.kills, 0);
+  step(room, 18);
+  const after = snapshot(room);
+  assert.equal(after.kills, 20);
+  assert.equal(after.magnetFlights.length, 0);
+  assert.equal(after.pickupNotice.kind, "bomb");
+  assert.equal(after.pickupNotice.count, 20);
+  assert.equal(room.boss, boss);
+  assert.ok(boss.hp > 0);
+  assert.deepEqual(room.players.map(p => p.gearRewards), [1, 1]);
+});
+
+test("both players can walk out of each other's view without a shared-camera tether", () => {
+  const room = live(), [a, b] = room.players;
+  room.nextSpawn = Infinity;
+  setInput(room, a.id, -1, 0); setInput(room, b.id, 1, 0);
+  step(room, 100);
+  const state = snapshot(room);
+  assert.ok(state.players[1].x - state.players[0].x > 2000);
+  assert.equal(state.state, "live");
+});
+
+test("the shared HUD receives the wheel cooldown and relayed flame effects after a hit", () => {
+  const room = live(), [p, ally] = room.players;
+  room.nextSpawn = Infinity;
+  p.qi.timer = ally.qi.timer = 10;
+  p.wheels = 1; p.evolved[1] = true;
+  room.enemies.push({ x: p.x + R.wheelOrbitRadius, y: p.y, id: 712, r: 13, hp: 100, maxHp: 100,
+    speed: 0, attack: 8, kind: "shade", stun: 0, flash: 0, contact: new Map(), wheels: new Map(), rangedReadyAt: Infinity });
+  step(room);
+  assert.equal(snapshot(room).players[0].wheelTimer, R.wheelCooldown);
+  assert.ok(snapshot(room).effects.some(e => e.kind === "wheel-trail" && e.life > 0));
+  step(room);
+  assert.ok(snapshot(room).players[0].wheelTimer < R.wheelCooldown);
+});

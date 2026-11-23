@@ -1,51 +1,61 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" class="playing coop">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>雙人守廟埕｜神明Q仙傳</title>
-<style>
-:root{color-scheme:dark;background:#111f25;color:#fff0d7;font:16px system-ui,sans-serif}*{box-sizing:border-box}
-body{margin:0;overscroll-behavior:none}main{display:grid;grid-template-rows:auto auto minmax(0,1fr);min-height:320px;height:100dvh;padding:10px;gap:7px}
-header,#players{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px}h1{font-size:20px;margin:0;color:#ffd07a}
-a,button{font:inherit;color:#31211c;background:#ffd07a;border:1px solid #a86642;border-radius:4px;padding:5px 9px;text-decoration:none}
-#players{flex-wrap:nowrap;margin:0;padding:0;list-style:none;font-size:13px}
-#players li{border:1px solid #456060;border-radius:4px;padding:4px 7px;min-width:0;flex:1;overflow-wrap:anywhere}
-#players span{display:block}#players span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.field{position:relative;min-height:0;border:2px solid #ac8053;border-radius:4px;background:#21343b;overflow:hidden}
-canvas{width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:none}
-#stage,#link-state{position:absolute;inset-inline:8px;pointer-events:none;margin:0;text-shadow:0 2px #101d21;font-weight:700}
-#stage{top:8px}#link-state{bottom:58px;color:#ffd07a}button{cursor:pointer}button:disabled{cursor:default;opacity:.55}
-[hidden]{display:none!important}
-#battle-actions{position:absolute;inset:auto 8px 8px;display:flex;gap:6px;justify-content:flex-end;pointer-events:none}
-#battle-actions button{pointer-events:auto;min-height:40px}
-#upgrade-panel{position:absolute;inset:auto 8px 58px auto;width:min(370px,calc(100% - 16px));max-height:calc(100% - 107px);overflow:auto;overscroll-behavior:contain;background:#16282f;border:1px solid #b08853;border-radius:4px;padding:10px}
-#upgrade-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
-#upgrade-panel h2{margin:0;color:#ffd07a;font-size:16px}
-#upgrade-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-#upgrade-options button{min-height:42px;text-align:left;background:#273d43;color:#fff0d7;border-color:#56665c;font-size:13px;overflow-wrap:anywhere}
-#upgrade-options button:hover:not(:disabled){background:#3a504e;border-color:#ffd07a}
-#score-status{position:absolute;inset:auto 8px 58px;pointer-events:none;margin:0;color:#92dfba;text-shadow:0 2px #101d21}
-#link-state:not(:empty)+#score-status{bottom:86px}
-@media(max-width:480px){main{padding:6px}h1{font-size:17px}#stage,#link-state,#score-status{font-size:13px}#players{font-size:12px}}
-</style>
+<link rel="stylesheet" href="/games/nezha/battle-ui.css">
 <main>
-<header><h1>神明Q仙傳・雙人守廟埕</h1><div><button id="retry" type="button" hidden>重連</button> <a href="/games/nezha/game">返回大廳</a></div></header>
-<ul id="players" aria-label="隊友狀態"></ul>
-<section class="field" aria-label="雙人戰鬥區">
-<canvas id="battle-arena" aria-label="雙人戰鬥地圖"></canvas>
-<p id="stage"></p><p id="link-state" role="status">連接戰鬥房間中…</p>
-<p id="score-status" hidden></p>
-<div id="battle-actions">
-  <button id="rank-save" type="button" hidden>重新儲存成績</button>
-  <button id="upgrade-toggle" type="button" aria-controls="upgrade-panel" aria-expanded="false" hidden>強化</button>
+<header><div><a href="/" style="color:inherit"><small>神明便利貼</small></a><strong>神明Q仙傳</strong></div>
+<div class="account"><span id="nickname"></span><button id="updates" type="button" aria-haspopup="dialog">更新日誌</button><button id="logout" type="button">登出</button><button id="pause" type="button" aria-haspopup="dialog">選單</button></div></header>
+<div class="field">
+<canvas id="arena" aria-label="雙人守廟埕遊戲區"></canvas>
+<div class="hud"><dl class="stats" aria-label="玩家角色狀態">
+<dt>血量</dt><dd id="health"></dd><dt>攻擊力</dt><dd id="attack"></dd>
+<dt>防禦力</dt><dd id="defense"></dd><dt>移動速度</dt><dd id="moveSpeed"></dd></dl><span id="clock"></span><span id="level"></span></div>
+<div id="wave" class="wave" hidden></div>
+<div class="bossbar" id="bossbar" hidden><span id="bossname"></span><progress id="bossHP" aria-label="魔王血量"></progress></div>
+<progress id="xp" aria-label="升級進度"></progress>
+<div id="team-status" class="team-status" hidden>
+  <span id="team-name"></span><span id="team-health"></span>
+  <progress id="team-hp" aria-label="隊友血量"></progress>
 </div>
-<aside id="upgrade-panel" aria-labelledby="upgrade-title" hidden>
-  <div id="upgrade-header"><h2 id="upgrade-title"></h2><button id="upgrade-close" type="button" aria-label="收起強化面板">×</button></div>
-  <div id="upgrade-options"></div>
-</aside>
+<p id="link-state" class="coop-notice" role="status">連接戰鬥房間中…</p>
+<p id="score-status" class="coop-notice" hidden></p>
+<div id="upgrade-panel" class="overlay coop-upgrade" hidden>
+  <div class="card" aria-labelledby="upgrade-title">
+    <h1 id="upgrade-title"></h1><p id="upgrade-detail"></p>
+    <div id="upgrade-options" class="actions level-up-actions"></div>
+    <button class="close-upgrade" id="upgrade-close" type="button">收起</button>
+  </div>
+</div>
+</div>
+<section class="skills" aria-label="氣功、法寶與冷卻時間">
+<div class="skill"><strong></strong><small></small><progress max="1" aria-label="基礎氣功冷卻"></progress></div>
+<div class="skill"><strong></strong><small></small><progress max="1" aria-label="乾坤圈冷卻"></progress></div>
+<div class="skill"><strong></strong><small></small><progress max="1" aria-label="風火輪冷卻"></progress></div>
+<div class="skill"><strong></strong><small></small><progress max="1" aria-label="金磚冷卻"></progress></div>
 </section>
+<div id="gear" aria-label="強化道具"></div>
+<footer class="hint"><span class="controls">WASD／方向鍵移動・數字鍵選擇</span><div class="xp-summary">
+  <span id="score"></span><button id="spendXP" type="button" aria-controls="upgrade-panel" aria-expanded="false" disabled>升級</button>
+</div></footer>
 </main>
+<dialog id="room-menu" class="card coop-menu" aria-labelledby="room-menu-title">
+  <h1 id="room-menu-title">雙人守廟埕</h1><p id="room-menu-status">線上戰鬥不會暫停。</p>
+  <div class="actions">
+    <button id="continue-room" type="button">1　繼續遊戲</button>
+    <button id="leave-room" type="button">2　返回大廳</button>
+    <button id="retry" type="button" hidden>重連</button>
+    <button id="rank-save" type="button" hidden>重新儲存成績</button>
+  </div>
+</dialog>
+<dialog id="update-log" class="update-log" aria-labelledby="update-title">
+  <header><h2 id="update-title">更新日誌</h2><form method="dialog"><button type="submit">關閉</button></form></header>
+  <div id="update-entries"></div>
+</dialog>
+<script src="/games/nezha/battle-rules.js"></script>
+<script src="/games/nezha/battle-ui.js"></script>
 <script src="/games/nezha/enemy-art.js"></script>
 <script src="/games/nezha/battle.js"></script>
 </html>

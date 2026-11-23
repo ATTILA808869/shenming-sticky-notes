@@ -15,7 +15,7 @@ function playerView(base, p) {
   const visible = item => Math.abs(item.x - p.x) <= 880 && Math.abs(item.y - p.y) <= 820;
   return { ...base, enemies: base.enemies.filter(e => e.guardian || visible(e)),
     bolts: base.bolts.filter(visible), loot: base.loot.filter(visible).slice(-280), effects: base.effects.filter(visible),
-    sparks: base.sparks.filter(visible), reward: pendingReward(p) };
+    sparks: base.sparks.filter(s => s.kind === "bomb" || visible(s)), reward: pendingReward(p) };
 }
 
 function verifyTicket(secret, ticket, now = Date.now()) {
@@ -41,7 +41,7 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
   const http = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      return res.end('{"ready":true,"battle":"tower-coop-v1"}');
+      return res.end('{"ready":true,"battle":"tower-coop-v2"}');
     }
     res.writeHead(404);res.end();
   });
@@ -60,6 +60,7 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
       clearTimeout(handshaking);
       if (joined && joined.clients.get(player) === ws) {
         joined.clients.delete(player);disconnect(joined.room, player);
+        if (!joined.clients.size && ["lost", "won", "closed"].includes(joined.room.state)) rooms.delete(joined.key);
       }
     });
     ws.on("message", data => {
@@ -82,7 +83,7 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
       joined = rooms.get(key);
       if (!joined) {
         if (rooms.size >= maxRooms) return ws.close(4003, "room capacity");
-        joined = { room: createRoom(ticket.roster, now), clients: new Map(), finishedAt: null };
+        joined = { key, room: createRoom(ticket.roster, now), clients: new Map(), finishedAt: null };
         rooms.set(key, joined);
       }
       player = ticket.player;

@@ -40,6 +40,8 @@ const assetTypes = {
   "battle-rules.js": "application/javascript; charset=utf-8",
   "battle-combat.js": "application/javascript; charset=utf-8",
   "enemy-art.js": "application/javascript; charset=utf-8",
+  "battle-ui.js": "application/javascript; charset=utf-8",
+  "battle-ui.css": "text/css; charset=utf-8",
   "nezha.webp": "image/webp",
   "nezha-sheet.png": "image/png",
   "jigong-attack-sheet.png": "image/png"
@@ -159,6 +161,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       case "battle-rules.js":
       case "battle-combat.js":
       case "enemy-art.js":
+      case "battle-ui.js":
+      case "battle-ui.css":
         if ((await gameSession(request))?.account.nickname) return await asset(path);
         break;
       case "api/session": {
