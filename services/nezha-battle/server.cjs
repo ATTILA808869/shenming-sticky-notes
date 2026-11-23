@@ -1,6 +1,6 @@
 const { createHmac, timingSafeEqual } = require("node:crypto");
 const { createServer } = require("node:http");
-const { createRoom, connect, disconnect, setInput, chooseReward, pendingReward, tick, snapshot } = require("./engine.cjs");
+const { createRoom, connect, disconnect, retirePlayer, setInput, chooseReward, pendingReward, tick, snapshot } = require("./engine.cjs");
 
 function signResult(secret, p, now = Date.now()) {
   if (!p?.enteredTower) return null;
@@ -74,7 +74,12 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
         if (joined.clients.get(player) !== ws) return;
         if (event.type === "move") setInput(joined.room, player, event.x, event.y);
         if (event.type === "pick") chooseReward(joined.room, player, event.rewardId, event.optionId);
-        if (event.type === "result") ws.send(JSON.stringify({ type: "result", proof: signResult(secret, seat, now), cleared: seat.creditedFloor }));
+        if (event.type === "result") ws.send(JSON.stringify({ type: "result", proof: signResult(secret, seat, now), cleared: seat.creditedFloor,
+          id: Number.isSafeInteger(event.id) ? event.id : undefined }));
+        if (event.type === "retire") {
+          retirePlayer(joined.room, player, now);
+          ws.send(JSON.stringify({ type: "retired" }));
+        }
         return;
       }
       const ticket = event.type === "join" ? verifyTicket(secret, event.ticket, now) : null;

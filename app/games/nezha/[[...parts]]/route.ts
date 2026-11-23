@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
@@ -52,6 +53,7 @@ const assetTypes = {
   "skill-icon-qiankun.png": "image/png",
   "skill-icon-fan.png": "image/png",
   "skill-icon-gourd.png": "image/png",
+  "tower-tome.png": "image/png",
   "battle-ui.js": "application/javascript; charset=utf-8",
   "battle-ui.css": "text/css; charset=utf-8",
   "nezha.webp": "image/webp",
@@ -59,10 +61,30 @@ const assetTypes = {
   "jigong-attack-sheet.png": "image/png"
 };
 
+const readAsset = (name: string) => readFile(resolve(process.cwd(), "lib", "nezha", "assets", name));
+let releaseRevision: Promise<string> | undefined;
+
+function gameRevision() {
+  async function fingerprint() {
+    const hash = createHash("sha256");
+    hash.update(JSON.stringify(socialRelease()));
+    for (const name of Object.keys(assetTypes)) {
+      if (name === "gm.html") continue;
+      hash.update(name).update(await readAsset(name));
+    }
+    return hash.digest("hex").slice(0, 16);
+  }
+  if (process.env.NODE_ENV !== "production") return fingerprint();
+  return releaseRevision ??= fingerprint().catch((error) => { releaseRevision = undefined; throw error; });
+}
+
 async function asset(name: keyof typeof assetTypes) {
-  const bytes = await readFile(resolve(process.cwd(), "lib", "nezha", "assets", name));
+  const bytes = await readAsset(name);
   const battleOrigin = name === "battle.html" ? battleConnection()?.origin : null;
-  return new Response(new Uint8Array(bytes), {
+  const body = name === "game.html" || name === "battle.html"
+    ? bytes.toString("utf8").replace("__NEZHA_REVISION__", await gameRevision())
+    : new Uint8Array(bytes);
+  return new Response(body, {
     headers: {
       ...privateHeaders,
       ...(name === "gm.html" ? { "X-Robots-Tag": "noindex, nofollow" } : {}),
@@ -143,6 +165,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     switch (path) {
       case "":
         return await asset("index.html");
+      case "api/revision":
+        return json({ revision: await gameRevision() });
       case "gm":
         return await asset("gm.html");
       case "gm/api/session":
@@ -187,6 +211,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       case "skill-icon-qiankun.png":
       case "skill-icon-fan.png":
       case "skill-icon-gourd.png":
+      case "tower-tome.png":
       case "battle-ui.js":
       case "battle-ui.css":
         if ((await gameSession(request))?.account.nickname) return await asset(path);

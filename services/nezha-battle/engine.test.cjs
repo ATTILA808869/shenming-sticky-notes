@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { createRoom, connect, disconnect, setInput, chooseReward, pendingReward, tick, snapshot, graceMs, reviveRadius } = require("./engine.cjs");
+const { createRoom, connect, disconnect, retirePlayer, setInput, chooseReward, pendingReward, tick, snapshot, graceMs, reviveRadius } = require("./engine.cjs");
 const { signResult } = require("./server.cjs");
 const R = require("../../lib/nezha/assets/battle-rules.js");
 const team = [{ id: "leader", name: "Leader", character: "nezha" }, { id: "guest", name: "Guest", character: "jigong" }];
@@ -68,6 +68,11 @@ test("story waits for all three scheduled bosses, then uses the same endless tow
   assert.equal(room.boss.kind, "dragon");
   room.boss.hp = 0;
   step(room);
+  assert.equal(room.floor, 1);
+  assert.deepEqual(snapshot(room).lootBreak, { seconds: 5, tome: false });
+  step(room, 99);
+  assert.equal(room.floor, 1);
+  step(room);
   assert.equal(room.floor, 2);
   assert.equal(room.cleared, 1);
   assert.deepEqual(room.players.map(p => [p.creditedFloor, p.creditedKills]), [[1, 1004], [1, 1004]]);
@@ -115,8 +120,36 @@ test("the tower guardian gives each eligible player a 5% tome roll", () => {
   const rolls = [.049, .05];
   room.random = () => rolls.shift() ?? .99;
   step(room);
-  assert.deepEqual([a.skillTome, b.skillTome], [true, false]);
+  const tome = room.loot.find(item => item.kind === "tome");
+  assert.equal(tome.ownerId, a.id);
+  assert.deepEqual([a.skillTome, b.skillTome], [false, false]);
   assert.equal(room.cleared, 1);
+  assert.deepEqual(snapshot(room).lootBreak, { seconds: 5, tome: true });
+  room.loot.push({ kind: "magnet", x: a.x, y: a.y });
+  step(room, 101);
+  assert.equal(room.floor, 1);
+  assert.deepEqual(snapshot(room).lootBreak, { seconds: 0, tome: true });
+  assert.equal(a.skillTome, false);
+  assert.ok(room.loot.includes(tome));
+  b.x = tome.x; b.y = tome.y;
+  step(room);
+  assert.deepEqual([a.skillTome, b.skillTome], [true, false]);
+  assert.equal(room.floor, 2);
+  assert.equal(snapshot(room).lootBreak, null);
+});
+
+test("retiring from a scored round frees the teammate and prevents future credits for the departing player", () => {
+  const room = live(), [a, b] = room.players;
+  room.floor = room.cleared = a.creditedFloor = b.creditedFloor = 1;
+  room.lootUntil = room.time;
+  room.loot.push({ kind: "tome", ownerId: a.id, x: 900, y: 900 });
+  retirePlayer(room, a.id, 0);
+  assert.equal(connect(room, a.id, 0), false);
+  assert.equal(a.creditedFloor, 1);
+  step(room);
+  assert.equal(room.floor, 2);
+  assert.equal(b.connected, true);
+  assert.equal(room.state, "live");
 });
 
 test("mini reward provides only four gears; solo rules still enforce health and movement caps", () => {
@@ -159,15 +192,15 @@ test("rescue progresses only with a connected nearby teammate and restores 30% o
   assert.equal(room.state, "lost");
 });
 
-test("tower bosses cycle four telegraphed distinct wide attacks without overlapping-cast damage", () => {
+test("tower bosses cycle six telegraphed attacks without overlapping-cast damage", () => {
   for (let floor = 1; floor <= 6; floor++) {
     const names = new Set();
-    for (let i = 0; i < 4; i++) {
-      const attack = R.towerCast(floor, i, { x: 900, y: 900 }, { x: 1050, y: 900 });
-      assert.ok(attack.duration >= 1.4 && attack.marks.length >= 4);
-      names.add(attack.name);
+    for (let i = 0; i < 6; i++) {
+      const attack = R.towerCast(floor, i, { x: 900, y: 900, r: 49 }, { x: 1050, y: 900 });
+      if (attack.marks.length) assert.ok(attack.duration >= 1.4 && attack.marks.length >= 4);
+      names.add(attack.pattern);
     }
-    assert.equal(names.size, 4);
+    assert.deepEqual(names, new Set(["meteor", "ring", "line", "cross", "dash", "qi"]));
   }
   const room = live(), [a, b] = room.players;
   room.nextSpawn = Infinity;
@@ -175,6 +208,52 @@ test("tower bosses cycle four telegraphed distinct wide attacks without overlapp
   step(room);
   assert.equal(a.hp, 80);
   assert.equal(b.hp, 100);
+});
+
+function bossFixture(pattern) {
+  const room = live(), [a, b] = room.players;
+  room.floor = 1; room.floorKills = R.towerGoal;
+  step(room);
+  const boss = room.boss;
+  boss.x = 1000; boss.y = 1000; boss.castAt = room.time;
+  boss.cast = Array.from({ length: 6 }, (_, i) => R.towerCast(1, i, boss, a).pattern).indexOf(pattern);
+  a.x = 1240; a.y = 1000; a.qi.timer = b.qi.timer = 30;
+  b.x = 1240; b.y = 1000;
+  step(room);
+  b.y = 1350;
+  return { room, a, b, boss };
+}
+test("dash warns along a fixed lane, hits at most once, and can be dodged", () => {
+  const { room, a, b, boss } = bossFixture("dash");
+  const lane = snapshot(room).bossLane;
+  assert.equal(lane.phase, "charge");
+  assert.equal(lane.angle, 0);
+  step(room, 18);
+  assert.equal(boss.x, lane.x);
+  assert.equal(a.hp, 100);
+  step(room, 14);
+  assert.equal(a.hp, 100 - R.hitValue(boss.attack * 1.10, a.defense));
+  assert.equal(b.hp, 100);
+  for (let i = 0; boss.special && i < 4; i++) step(room);
+  assert.equal(boss.x, lane.x + lane.length);
+  assert.equal(snapshot(room).bossLane, null);
+  const nearWall = R.towerLane({ pattern: "dash", duration: 1 }, { x: 2830, y: 800, r: 49 }, { x: 2900, y: 800 }, 2880, 2160, 0, 5);
+  assert.equal(nearWall.length, 20);
+});
+test("boss qi telegraphs three shots, travels, and is interrupted by stun", () => {
+  const { room, a, b } = bossFixture("qi");
+  assert.equal(snapshot(room).bossLane.pattern, "qi");
+  step(room, 19);
+  assert.equal(room.bolts.filter(shot => shot.style === "tower-qi").length, 3);
+  assert.equal(a.hp, 100);
+  step(room, 15);
+  assert.ok(a.hp < 100);
+  assert.equal(b.hp, 100);
+  const interrupted = bossFixture("qi");
+  interrupted.boss.stun = 1.2;
+  step(interrupted.room, 20);
+  assert.equal(snapshot(interrupted.room).bossLane, null);
+  assert.equal(interrupted.room.bolts.length, 0);
 });
 
 test("shared combat hits with actual character attack; nearby collected XP benefits both teammates", () => {

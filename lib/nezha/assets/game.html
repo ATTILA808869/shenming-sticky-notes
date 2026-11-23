@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-Hant">
 <meta charset="utf-8">
+<meta name="nezha-revision" content="__NEZHA_REVISION__">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>神明Q仙傳｜神明便利貼</title>
 <link rel="preload" as="image" href="/games/nezha/nezha-sheet.png" fetchpriority="high">
@@ -95,7 +96,7 @@ const {towerBaselineFloor,towerFloorGrowth,towerHealthBoost,towerDamageBoost,tow
 const storyMobLimit=80;
 const projectilePlayerRadius=12;
 const towerStartLevel=50,towerStartUpgrades=50,towerStartRewards=25;
-let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline;
+let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline, towerBreak;
 let optionButtons=[];
 const miniBossChance=.30;
 let nextWave, waveSlots, miniBossKills, miniBossThreshold, gearRewards, nextRewardAt;
@@ -156,6 +157,7 @@ function reset(){
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
   towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
   towerBaseline=null;
+  towerBreak=null;
   nextWave=0;waveSlots=0;miniBossKills=0;miniBossThreshold=50;gearRewards=0;nextRewardAt=0;
   trackCamera();
 }
@@ -234,15 +236,35 @@ async function start(event,fromTower=false){
     refreshLobbyPlay();
   }
 }
+function pausePanel(){
+  setMode('paused');
+  panel('休息一下',clearedFloors?'已通過無限塔第 '+clearedFloors+' 層。':'通過無限塔第 1 層後即可登錄排行榜。',[
+    ['繼續遊戲',()=>setMode('play')],
+    ['結算現在成績',clearedFloors?confirmSettlement:null],
+    ['從頭重新開始',start],
+    ...(profile.towerStartUnlocked?[['從無限塔第 1 層重新開始',event=>start(event,true)]]:[]),['回到大廳',showLobby]
+  ]);
+}
+function confirmSettlement(){
+  setMode('settling');
+  const actions=panel('結算現在成績','結束本局並儲存已通過的 '+clearedFloors+' 層。只有超過個人最佳紀錄才會更新排行榜。',[
+    ['確認結算',async()=>{
+      for(const button of actions.children)button.disabled=true;
+      status.textContent='儲存成績中…';
+      try{
+        const result=await accountRequest('score',currentScore());
+        finish(true,scoreSavedText(result));
+      }catch(error){
+        status.textContent=error.message;
+        for(const button of actions.children)button.disabled=false;
+      }
+    }],['取消',pausePanel]
+  ]);
+  const status=document.createElement('p');status.setAttribute('role','status');card.append(status);
+}
 function togglePause(){
-  if(mode==='play'){
-    setMode('paused');
-    const resume=()=>setMode('play');
-    panel('休息一下','準備好就回廟埕繼續玩。',[
-      ['繼續遊戲',resume],['從頭重新開始',start],
-      ...(profile.towerStartUnlocked?[['從無限塔第 1 層重新開始',event=>start(event,true)]]:[]),['回到大廳',showLobby]
-    ]);
-  }else if(mode==='paused')setMode('play');
+  if(mode==='play')pausePanel();
+  else if(mode==='paused')setMode('play');
 }
 pause.onclick=togglePause;
 document.addEventListener('keydown',event=>{
@@ -906,27 +928,31 @@ function showLeaderboard(back){
   const content=document.createElement('div');actions.before(content);
   void loadLeaderboard(content);
 }
-function finish(won){
+function currentScore(){
+  const progress=towerFloor>clearedFloors?Math.min(floorKills,towerGoal):0;
+  return {cleared:clearedFloors,progress,kills};
+}
+const scoreSavedText=result=>result.updated?'已更新個人最高樓層與排行榜。':'已保留原有的最佳排行榜紀錄。';
+function finish(won,saved=''){
   runInProgress=false;
   setMode('done');
-  const progress=towerFloor>clearedFloors?Math.min(floorKills,towerGoal):0;
-  const record={cleared:clearedFloors,progress,kills};
-  const replay=()=>finish(won);
+  const record=currentScore();
+  const replay=()=>finish(won,saved);
   const choices=[['從頭再玩一局',start]];
   if(profile.towerStartUnlocked)choices.push(['從無限塔第 1 層開始',event=>start(event,true)]);
   choices.push(['無限塔排行榜',()=>showLeaderboard(replay)]);
-  if(record.cleared>0)choices.push(['公開本局成績',async event=>{
+  if(record.cleared>0&&!saved)choices.push(['公開本局成績',async event=>{
     const button=event.currentTarget;button.disabled=true;
     const status=document.createElement('div');status.setAttribute('role','status');card.append(status);
     try{
       const result=await accountRequest('score',record);
-      status.textContent=result.updated?'已儲存最高通過樓層。':'已保留你原有的最高通過樓層。';
+      status.textContent=scoreSavedText(result);
     }catch(error){status.textContent=error.message;button.disabled=false;}
   }]);
   choices.push(['回到大廳',showLobby]);
   const deathText=!won&&player.deathCause?' 死亡原因：'+player.deathCause+'。':'';
   panel(won?'本局結束':'再試一次吧！',
-    (towerFloor?'無限塔通過 '+clearedFloors+' 層。':'生存計時 '+formatTime(time)+'。')+' 等級 '+player.level+'，總擊退 '+kills+' 隻敵人。'+deathText,choices,true);
+    (towerFloor?'無限塔通過 '+clearedFloors+' 層。':'生存計時 '+formatTime(time)+'。')+' 等級 '+player.level+'，總擊退 '+kills+' 隻敵人。'+deathText+(saved?' '+saved:''),choices,true);
 }
 function formatTime(seconds){
   const value=Math.floor(seconds+.00001);
@@ -942,6 +968,7 @@ function startBoss(){
 }
 function enterFloor(){
   towerFloor++;floorKills=0;floorTime=0;spawn=.65;
+  towerBreak=null;
   // Share one stat baseline so the 15% multiplier is the only growth from floor 5.
   if(towerFloor===towerBaselineFloor)towerBaseline=currentEnemyBalance();
   boss=null;mobs=[];stars=[];drops=[];warnings=[];sparks=[];skillCombat.reset();
@@ -953,23 +980,29 @@ function enterFloor(){
   trackCamera();setMode('play');
   if(towerFloor===1&&!profile.jigongEarned){towerEntryPending=true;void saveTowerUnlock();}
 }
-function floorCleared(rewardXP=0,tomeFound=false){
-  const mainStory=towerFloor===0;
-  clearedFloors=towerFloor;
+function floorCleared(rewardXP=0){
   setMode('upgrade');
   const rewardText=rewardXP?'獲得 '+rewardXP+' XP。':'';
-  const tomeText=tomeFound?'獲得絕世寶典！第三個法寶欄已解鎖。':'';
-  const canLearnThird=player.skillTome&&learnedSkillCount()===normalSkillLimit;
-  const choices=[[mainStory?'進入無限塔第 1 層':'前往第 '+(towerFloor+1)+' 層',enterFloor],['結束本局',()=>finish(true)]];
-  if(canLearnThird){
-    const missing=player.skillLevels.indexOf(0);
-    choices.unshift(['學習 '+activeSkillNames()[missing],()=>chooseSkill(missing,()=>floorCleared(rewardXP,tomeFound))]);
-  }
-  const details=canLearnThird?(tomeText||'第三個法寶欄已解鎖。'):
-    rewardText+tomeText+'保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王；尚未解鎖第三個法寶時，守關魔王有 5% 機率掉落絕世寶典。';
-  const actions=panel(mainStory?'超級龍王退散！':'無限塔第 '+towerFloor+' 層通過',details,choices,true);
-  if(canLearnThird)actions.classList.add('tome-actions');
-  if(towerFloor===1&&checkpointRun)mountCheckpointStatus(card);
+  panel('超級龍王退散！',rewardText+'每層擊倒 1,000 隻敵人召喚塔王；守關魔王有 5% 機率掉落絕世寶典。',[
+    ['進入無限塔第 1 層',enterFloor],['結束本局',()=>finish(true)]
+  ],true);
+}
+function startTowerLoot(guardian){
+  clearedFloors=towerFloor;
+  if(NezhaRules.rollSkillTome(player,towerFloor))drops.push({
+    x:clamp(guardian.x,36,mapWidth-36),y:clamp(guardian.y,46,mapHeight-36),kind:'tome'
+  });
+  dropItem(guardian);
+  towerBreak={until:elapsed+NezhaRules.towerLootSeconds};
+  mobs=[];boss=null;warnings=[];enemyShots=[];skillCombat.reset();
+}
+function towerLootTick(dt){
+  updateMagnet();
+  collectLoot(dt);
+  if(NezhaRules.towerLootState(towerBreak.until-elapsed,drops.some(item=>item.kind==='tome')))return;
+  updateMagnet(true);
+  nextRewardAt=Math.max(nextRewardAt,elapsed+rewardInterval);
+  enterFloor();
 }
 function spawnTowerGuardian(){
   const guardian=towerGuardians[(towerFloor-1)%towerGuardians.length];
@@ -1049,6 +1082,31 @@ function advanceEnemyShots(dt,fromX,fromY){
     return shot.life>0&&shot.x>=0&&shot.x<=mapWidth&&shot.y>=0&&shot.y<=mapHeight;
   });
 }
+function updateTowerSpecial(fromX,fromY){
+  const lane=boss?.special;
+  if(!lane)return;
+  if(boss.hp<=0||boss.stun>0||boss.knockedBackAt===elapsed){
+    boss.special=null;
+    return;
+  }
+  if(elapsed<lane.readyAt)return;
+  if(lane.pattern==='qi'){
+    for(const shot of NezhaRules.fireTowerQi(lane))enemyShots.push({...shot,source:boss.name+'・'+lane.name});
+    sparks.push({x:lane.x,y:lane.y,r:43,life:.32,kind:'boss-area',pattern:'qi'});
+    boss.special=null;
+    return;
+  }
+  lane.phase='dash';
+  const step=NezhaRules.towerDashStep(lane,boss,elapsed);
+  if(!lane.hit&&NezhaRules.sweptHit(step.fromX,step.fromY,step.x,step.y,fromX,fromY,player.x,player.y,lane.r)){
+    hurt(lane.damage,boss.name+'・'+lane.name);lane.hit=true;
+  }
+  if(!lane.trailAt||elapsed>=lane.trailAt){
+    sparks.push({x:step.fromX,y:step.fromY,r:boss.r,angle:lane.angle,life:.24,kind:'boss-dash'});
+    lane.trailAt=elapsed+.06;
+  }
+  if(step.done)boss.special=null;
+}
 function updateEnemyRanged(dt,fromX,fromY){
   advanceEnemyShots(dt,fromX,fromY);
   let active=enemyShots.length;
@@ -1091,7 +1149,8 @@ function attract(item,dt,radius,speed){
 }
 function activateMagnet(){
   const flights=[];
-  const stride=Math.max(1,Math.ceil((stars.length+drops.length)/maxMagnetFlights));
+  const normalDrops=drops.filter(drop=>drop.kind!=='tome');
+  const stride=Math.max(1,Math.ceil((stars.length+normalDrops.length)/maxMagnetFlights));
   let index=0,visualTime=magnetPulseTime,bombCount=0,bombArrival=0;
   function launch(item,kind){
     const visible=index++%stride===0;
@@ -1106,8 +1165,8 @@ function activateMagnet(){
     flights.push({x:item.x,y:item.y,kind,startedAt:elapsed,duration});
   }
   for(const star of stars){launch(star,'xp');player.xp+=star.value;}
-  for(const drop of drops){launch(drop,drop.kind);if(drop.kind==='heal')heal(NezhaRules.loot.healFraction);}
-  stars=[];drops=[];
+  for(const drop of normalDrops){launch(drop,drop.kind);if(drop.kind==='heal')heal(NezhaRules.loot.healFraction);}
+  stars=[];drops=drops.filter(drop=>drop.kind==='tome');
   // Keep the reward window bounded even when multiple magnets are picked up in quick succession.
   const previous=magnetEffect;
   const bombBursts=previous?.bombBursts??[];
@@ -1144,6 +1203,12 @@ function updateMagnet(finish=false){
 function collectLoot(dt){
   let magnetCollected=false,bombs=0;
   drops=drops.filter(drop=>{
+    if(drop.kind==='tome'){
+      if(distance(drop,player)>NezhaRules.tomePickupRadius)return true;
+      player.skillTome=true;
+      sparks.push({x:drop.x,y:drop.y,life:1.4,r:32,kind:'tome'});
+      return false;
+    }
     attract(drop,dt,pickupRadius,240);
     if(distance(drop,player)>=25)return true;
     if(drop.kind==='magnet')magnetCollected=true;
@@ -1188,7 +1253,7 @@ function separateEnemies(enemies){
         const nx=gap>0?dx/gap:Math.cos(angle);
         const ny=gap>0?dy/gap:Math.sin(angle);
         const correction=(spacing-gap)*.8;
-        const share=other.r**2/(enemy.r**2+other.r**2);
+        const share=enemy.special?0:other.special?1:other.r**2/(enemy.r**2+other.r**2);
         enemy.x=clamp(enemy.x+nx*correction*share,15,mapWidth-15);
         enemy.y=clamp(enemy.y+ny*correction*share,15,mapHeight-15);
         other.x=clamp(other.x-nx*correction*(1-share),15,mapWidth-15);
@@ -1203,7 +1268,7 @@ function separateEnemies(enemies){
 function update(dt){
   elapsed+=dt;
   if(towerFloor){
-    if(!boss){floorTime+=dt;towerTime+=dt;}
+    if(!boss&&!towerBreak){floorTime+=dt;towerTime+=dt;}
   }else if(!boss){
     const stage=bossStages[nextBoss];
     time=Math.min(stage.at,time+dt);
@@ -1221,6 +1286,11 @@ function update(dt){
   player.x=clamp(player.x+dx*movement,20,mapWidth-20);
   player.y=clamp(player.y+dy*movement,45,mapHeight-25);
   trackCamera();
+  if(towerBreak){
+    sparks=sparks.filter(s=>(s.life-=dt)>0);
+    towerLootTick(dt);
+    return;
+  }
   updateSpawns(dt);
   const enemies=boss?[...mobs,boss]:mobs;
   skillCombat.frame(player,elapsed,mapWidth,mapHeight,boss,sparks);
@@ -1251,7 +1321,7 @@ function update(dt){
     const gap=distance(player,enemy);
     if(enemy.kind==='healer')healEnemyAllies(enemy,enemies);
     const followRange=enemy.kind==='caster'?175:enemy.kind==='healer'?100:enemy.r+12;
-    if(gap>followRange&&!enemy.aim){
+    if(gap>followRange&&!enemy.aim&&!enemy.special){
       const [mx,my]=unit(player.x-enemy.x,player.y-enemy.y);
       const step=enemy.speed*skillCombat.jigongSlowFactor(enemy)*dt;
       enemy.x+=mx*step;enemy.y+=my*step;
@@ -1262,22 +1332,29 @@ function update(dt){
   separateEnemies(enemies);
   // Contact must match the settled positions that the player sees after knockback and separation.
   for(const enemy of enemies){
-    if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed||distance(player,enemy)>enemy.r+16){
+    if(towerFloor&&boss?.hp<=0)break;
+    if(enemy.hp<=0||enemy.stun>0||enemy.special||enemy.knockedBackAt===elapsed||distance(player,enemy)>enemy.r+16){
       enemy.nextContactHitAt=undefined;
     }else if(elapsed>=(enemy.nextContactHitAt??0)){
       hurt(enemyAttack(enemy),(enemy.name??'怪物')+'撞擊');
       enemy.nextContactHitAt=elapsed+contactHitInterval;
     }
   }
-  updateEnemyRanged(dt,fromX,fromY);
-  if(boss&&boss.hp>0&&boss.stun<=0){
+  if(!towerFloor||!(boss?.hp<=0))updateEnemyRanged(dt,fromX,fromY);
+  updateTowerSpecial(fromX,fromY);
+  if(boss&&boss.hp>0&&boss.stun<=0&&!boss.special){
     boss.cast-=dt;
     if(boss.cast<=0){
       boss.cast=boss.interval*(1-.25*bossPressure());
       if(towerFloor){
         const attack=NezhaRules.towerCast(towerFloor,boss.patternIndex++,boss,player);
-        for(const mark of attack.marks)warnings.push({...mark,life:attack.duration,duration:attack.duration,
-          castId:boss.patternIndex,damage:enemyAttack(boss)*attack.power,source:boss.name+'・'+attack.name});
+        if(attack.marks.length){
+          for(const mark of attack.marks)warnings.push({...mark,life:attack.duration,duration:attack.duration,pattern:attack.pattern,
+            name:attack.name,castId:boss.patternIndex,damage:enemyAttack(boss)*attack.power,source:boss.name+'・'+attack.name});
+        }else{
+          boss.special=NezhaRules.towerLane(attack,boss,player,mapWidth,mapHeight,elapsed,enemyAttack(boss)*attack.power);
+          boss.facing=Math.cos(boss.special.angle)<0?-1:1;
+        }
       }else{
         const spread=boss.at===480?3:boss.at===300?2:1;
         for(let i=0;i<spread;i++){
@@ -1289,6 +1366,7 @@ function update(dt){
       }
     }
   }
+  if(boss?.hp<=0)warnings=[];
   const hitCasts=new Set();
   warnings=warnings.filter(mark=>{
     mark.life-=dt;
@@ -1297,7 +1375,7 @@ function update(dt){
       hurt(mark.damage,mark.source);
       if(mark.castId)hitCasts.add(mark.castId);
     }
-    sparks.push({x:mark.x,y:mark.y,life:.32,r:mark.r});
+    sparks.push({x:mark.x,y:mark.y,life:.32,r:mark.r,kind:mark.pattern?'boss-area':undefined,pattern:mark.pattern});
     return false;
   });
   if(player.hp>0){
@@ -1332,10 +1410,9 @@ function update(dt){
         checkpointRun={runId:unlockRun,kills:floorKills};
         void saveTowerCheckpoint();
       }
-      const tomeFound=NezhaRules.rollSkillTome(player,towerFloor);
-      if(tomeFound)player.skillTome=true;
+      if(towerFloor){startTowerLoot(boss);return;}
       boss=null;
-      const finishRewards=()=>continueAfterGearRewards(()=>floorCleared(rewardXP,tomeFound));
+      const finishRewards=()=>continueAfterGearRewards(()=>floorCleared(rewardXP));
       if(rewardXP)continueLevelUps(finishRewards);
       else finishRewards();
       return;
@@ -1424,7 +1501,7 @@ function ghost(enemy){
   combatArt.enemyActor(enemy,elapsed,kind,isBoss);
 }
 function drawXpGem(x,y){NezhaWorldArt.gem(ctx,x,y);}
-function drawLootDrop(x,y,kind){NezhaWorldArt.drop(ctx,x,y,kind);}
+function drawLootDrop(x,y,kind){NezhaWorldArt.drop(ctx,x,y,kind,elapsed);}
 function drawMagnetPull(){
   if(magnetEffect)NezhaWorldArt.magnet(ctx,view,elapsed,[magnetEffect],magnetEffect.flights,()=>player,magnetPulseTime);
 }
@@ -1466,7 +1543,12 @@ function draw(){
   if(jigongWindCasts.length)drawJigongWindEyes(jigongWindCasts);
   for(const mark of warnings){
     const charge=clamp(1-mark.life/mark.duration,0,1);
-    drawGroundWarning(mark.x,mark.y,mark.r,charge);
+    if(mark.pattern)combatArt.bossWarning(mark,charge);
+    else drawGroundWarning(mark.x,mark.y,mark.r,charge);
+  }
+  if(boss?.special){
+    const lane=boss.special;
+    combatArt.bossLane({...lane,charge:clamp((elapsed-lane.started)/(lane.readyAt-lane.started),0,1)});
   }
   for(const mob of mobs)if(mob.aim)drawEnemyAim(mob);
   for(const star of stars)drawXpGem(star.x,star.y);
@@ -1496,7 +1578,10 @@ function draw(){
     drawPlayerSprite(pose,x,y+7+hover,attacking?player.attackFacing:player.facing);
   }
   for(const spark of sparks){
-    if(spark.kind==='boss-xp'){
+    if(spark.kind==='boss-area')combatArt.bossImpact(spark);
+    else if(spark.kind==='boss-dash')combatArt.dashTrail(spark);
+    else if(spark.kind==='tome')NezhaWorldArt.tomePickup(ctx,spark);
+    else if(spark.kind==='boss-xp'){
       ctx.save();ctx.globalAlpha=Math.min(1,spark.life*2);
       ctx.textAlign='center';ctx.textBaseline='bottom';ctx.font='bold 20px system-ui';
       ctx.lineWidth=4;ctx.strokeStyle='#24323c';ctx.fillStyle='#ffdc88';
@@ -1512,6 +1597,7 @@ function draw(){
   }
   ctx.restore();
   if(mode==='play')drawPlayerHealth();
+  NezhaWorldArt.tomeGuide(ctx,view,drops.find(item=>item.kind==='tome'));
   if(stick){
     const size=Math.hypot(stick.dx,stick.dy),[sx,sy]=unit(stick.dx,stick.dy);
     circle(stick.x,stick.y,34,'#38244a66','#fff4db99');
@@ -1519,6 +1605,8 @@ function draw(){
   }
 }
 const hud=NezhaUi.mountHud(document,NezhaRules);
+NezhaUi.mountReleaseNotice(document);
+const showTowerLoot=NezhaUi.mountTowerLoot(document);
 const {setText}=NezhaUi;
 hud.spend.onclick=spendSavedXP;
 NezhaUi.mountUpdateLog(document,()=>{if(mode==='play')togglePause();});
@@ -1537,12 +1625,14 @@ function frame(now){
     update(dt);
   }
   draw();
+  showTowerLoot(mode==='play'&&towerBreak?NezhaRules.towerLootState(towerBreak.until-elapsed,drops.some(item=>item.kind==='tome')):null);
   const unlocked=unlockToastUntil>elapsed;
   if(unlockToast.hidden===unlocked)unlockToast.hidden=!unlocked;
   if(mode==='lobby')return;
   const requiredXP=needed();
   hud.render({player,time,floor:towerFloor,floorKills,waveIndex:nextWave,
     boss:boss?{name:boss.name,hp:boss.hp,maxHp:boss.maxHp,pressure:bossPressure()}:null,
+    bossCast:boss?.special?.name??warnings.find(mark=>mark.name)?.name,
     kills,needed:requiredXP,ready:mode==='play'&&player.xp>=requiredXP?availableLevels():0});
   if(mode==='play')requestFrame();
 }

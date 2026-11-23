@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-Hant" class="playing coop">
 <meta charset="utf-8">
+<meta name="nezha-revision" content="__NEZHA_REVISION__">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>雙人守廟埕｜神明Q仙傳</title>
@@ -46,9 +47,11 @@
   <div class="actions">
     <button id="continue-room" type="button">1　繼續遊戲</button>
     <button id="leave-room" type="button">2　返回大廳</button>
+    <button id="settle-room" type="button" disabled>3　結算現在成績</button>
     <button id="retry" type="button" hidden>重連</button>
     <button id="rank-save" type="button" hidden>重新儲存成績</button>
   </div>
+  <p id="settle-status" role="status" hidden></p>
 </dialog>
 <dialog id="update-log" class="update-log" aria-labelledby="update-title">
   <header><h2 id="update-title">更新日誌</h2><form method="dialog"><button type="submit">關閉</button></form></header>
