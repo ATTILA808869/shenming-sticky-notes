@@ -170,7 +170,7 @@ test("shared combat hits with actual character attack; nearby collected XP benef
   p.attack = 52; p.qi.timer = 0;
   const enemy = { x: p.x + 30, y: p.y, r: 12, hp: 100 };
   combat.frame(p, room.time, 2880, 2160, null, []);
-  combat.useSkills(.05, [enemy]);
+  combat.updateSkills(.05, [enemy]);
   assert.equal(enemy.hp, 48);
 });
 
@@ -209,4 +209,24 @@ test("tower health and damage scale 15% per floor starting with floor five", () 
   assert.ok(Math.abs(six.maxHp - five.maxHp * 1.15) <= 1);
   assert.ok(Math.abs(five.attack / four.attack - 1.15) < 1e-9);
   assert.ok(Math.abs(six.attack / five.attack - 1.15) < 1e-9);
+});
+
+test("Jigong casts every learned relic and evolved wind, but cannot start another volley when down", () => {
+  const room = live(), p = room.players[1];
+  p.skillTome = true;
+  for (let i = 0; i < 3; i++) assert.equal(R.learnSkill(p, i, 0, "damage"), true);
+  p.skillLevels[2] = 10; p.gear[3] = 1; R.applyEvolutions(p);
+  const target = { hp: 10000, r: 18, x: p.x + 200, y: p.y }, combat = p.combat;
+  combat.frame(p, .05, 2880, 2160, null, []);
+  combat.updateSkills(.05, [target]);
+  combat.frame(p, .16, 2880, 2160, null, []);
+  combat.updateSkills(.05, [target]);
+  const shots = combat.effects().jigongShots;
+  assert.deepEqual([0, 1, 2].map(i => shots.filter(s => s.index === i).length), [8, 4, 3]);
+  assert.equal(combat.effects().jigongWindCasts[0].eyes.length, 10);
+  combat.reset();
+  p.jigong[0].castAt = .2;
+  combat.frame(p, .21, 2880, 2160, null, []);
+  combat.updateSkills(.05, [target], false);
+  assert.equal(combat.effects().jigongShots.length, 0);
 });

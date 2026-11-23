@@ -272,7 +272,7 @@ let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline;
 let optionButtons=[];
 const miniBossChance=.30;
 let nextWave, waveSlots, miniBossKills, miniBossThreshold, gearRewards, nextRewardAt;
-const skillCombat=NezhaCombat.create();
+const skillCombat=NezhaCombat.create(NezhaRules);
 let boss, nextBoss, elapsed, warnings, drops, wheelTrail, trailTimer;
 let enemyShots, nextEnemyAimAt;
 let magnetEffect;
@@ -1399,7 +1399,7 @@ function update(dt){
   updateSpawns(dt);
   const enemies=boss?[...mobs,boss]:mobs;
   skillCombat.frame(player,elapsed,mapWidth,mapHeight,boss,sparks);
-  skillCombat.useSkills(dt,enemies);
+  skillCombat.updateSkills(dt,enemies);
   const wheelStart=player.wheelAngle,wheelSweep=player.wheelSpeed*dt;
   const flameWheel=player.wheels>0&&player.evolved[1];
   const hitRadius=wheelHitRadius*(flameWheel?wheelEvolutionScale:1);

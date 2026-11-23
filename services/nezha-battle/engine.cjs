@@ -29,7 +29,7 @@ function createRoom(roster, now = Date.now(), random = Math.random) {
       connected: false, disconnectedAt: null, dx: 0, dy: 0, heading: 0, facing: -1,
       attackFacing: -1, attackUntil: -1, attackAt: -1, pendingLevels: 0, gearRewards: 0,
       reward: null, revive: 0, safeUntil: 0, enteredTower: false, creditedFloor: 0, creditedKills: 0,
-      combat: Combat.create(random)
+      combat: Combat.create(R, random)
     }))
   };
 }
@@ -202,7 +202,7 @@ function playerAttacks(room, dt) {
   for (const p of room.players) {
     const active = available(p), combat = p.combat;
     combat.frame(p, room.time, width, height, room.boss, room.sparks);
-    combat.useSkills(dt, room.enemies, active);
+    combat.updateSkills(dt, room.enemies, active);
     if (active) combat.updateIngots(dt, room.enemies);
     if (combat.effects().jigongWindCasts.length) combat.advanceJigongWind(dt, room.enemies);
     const start = p.wheelAngle, sweep = p.wheelSpeed * dt;
