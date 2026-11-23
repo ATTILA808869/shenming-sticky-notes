@@ -213,7 +213,10 @@ function playerAttacks(room, dt) {
     p.wheelTrail = p.wheelTrail.filter(flame => (flame.life -= dt) > 0);
     if (!active || !p.wheels) continue;
     const flaming = p.evolved[1], radius = R.wheelHitRadius * (flaming ? R.wheelEvolutionScale : 1);
-    if (flaming) for (let i = 0; i < p.wheels; i++) p.wheelTrail.push({ ...wheelPoint(p, i), life: .32 });
+    if (flaming) for (let i = 0; i < p.wheels; i++) {
+      const { x, y } = R.wheelPoint(p, i);
+      p.wheelTrail.push({ x, y, life: .32 });
+    }
     for (const e of room.enemies) {
       if (e.hp <= 0 || room.time < (e.wheels.get(p.id) ?? 0) || !combat.wheelSweepsEnemy(e, start, sweep, radius)) continue;
       e.wheels.set(p.id, room.time + R.wheelCooldown); combat.damage(e, p.wheelDamage); p.wheelTimer = R.wheelCooldown;
@@ -226,11 +229,6 @@ function playerAttacks(room, dt) {
     }
   }
 }
-function wheelPoint(p, i) {
-  const theta = p.wheelAngle + i * 2 * Math.PI / p.wheels;
-  return { x: p.x + Math.cos(theta) * R.wheelOrbitRadius, y: p.y + Math.sin(theta) * R.wheelOrbitRadius };
-}
-
 function enemyAttack(room, e) {
   const pressure = e.guardian ? clamp((room.time - e.start - 25) / 50, 0, 1) : 0;
   return e.attack * (1 + pressure * .20);
@@ -563,7 +561,7 @@ function snapshot(room) {
     }
     for (const flame of p.wheelTrail) effects.push({ ...flame, r: 20, kind: "wheel-trail" });
     if (available(p)) for (let i = 0; i < p.wheels; i++) {
-      effects.push({ ...wheelPoint(p, i),
+      effects.push({ ...R.wheelPoint(p, i),
         r: R.wheelHitRadius * (p.evolved[1] ? R.wheelEvolutionScale : 1), kind: p.evolved[1] ? "fire-wheel" : "wheel" });
     }
   }

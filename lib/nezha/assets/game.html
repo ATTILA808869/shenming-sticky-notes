@@ -34,6 +34,7 @@
 </dialog>
 <script src="/games/nezha/battle-rules.js"></script>
 <script src="/games/nezha/battle-combat.js"></script>
+<script src="/games/nezha/skill-effects.js"></script>
 <script src="/games/nezha/enemy-art.js"></script>
 <script src="/games/nezha/battle-ui.js"></script>
 <script src="/games/nezha/social.js"></script>
@@ -334,10 +335,7 @@ for(const name of ['gesturestart','gesturechange'])canvas.addEventListener(name,
   if(mode==='play'&&event.cancelable)event.preventDefault();
 },{passive:false});
 function wheelPoints(){
-  return Array.from({length:player.wheels},(_,i)=>{
-    const angle=player.wheelAngle+i*2*Math.PI/player.wheels;
-    return {x:player.x+Math.cos(angle)*wheelOrbitRadius,y:player.y+Math.sin(angle)*wheelOrbitRadius};
-  });
+  return Array.from({length:player.wheels},(_,i)=>NezhaRules.wheelPoint(player,i));
 }
 const challengeTime=()=>time+towerTime;
 function currentEnemyBalance(){
@@ -1230,7 +1228,7 @@ function update(dt){
   player.wheelAngle=(wheelStart+wheelSweep)%(2*Math.PI);
   trailTimer-=dt;
   if(flameWheel&&trailTimer<=0){
-    wheelTrail.push(...wheelPoints().map(wheel=>({...wheel,life:.32})));
+    wheelTrail.push(...wheelPoints().map(({x,y})=>({x,y,life:.32})));
     trailTimer=.035;
   }
   wheelTrail=wheelTrail.filter(flame=>(flame.life-=dt)>0);
@@ -1488,7 +1486,7 @@ function draw(){
   if(boss)ghost(boss);
   for(const bolt of targetedBolts)drawTargetedBolt(bolt);
   for(const shot of jigongShots)drawJigongShot(shot);
-  for(const shot of shots)if(shot.lag<=0)combatArt.ring(shot);
+  for(const shot of shots)if(shot.lag<=0)combatArt.ring(shot,elapsed);
   const wheelScale=player.wheels&&player.evolved[1]?wheelEvolutionScale:1;
   for(const flame of wheelTrail)combatArt.flame(flame,wheelScale);
   for(const wheel of wheelPoints())combatArt.wheel(wheel,wheelScale);
@@ -1537,6 +1535,7 @@ const {setText}=NezhaUi;
 hud.spend.onclick=spendSavedXP;
 NezhaUi.mountUpdateLog(document,()=>{if(mode==='play')togglePause();});
 let previous=null,framePending=false;
+NezhaSkillArt.onReady(requestFrame);
 function requestFrame(){
   if(framePending)return;
   framePending=true;

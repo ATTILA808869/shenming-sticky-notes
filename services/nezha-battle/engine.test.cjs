@@ -306,3 +306,12 @@ test("the shared HUD receives the wheel cooldown and relayed flame effects after
   step(room);
   assert.ok(snapshot(room).players[0].wheelTimer < R.wheelCooldown);
 });
+
+test("co-op sends each wheel's orbital direction even when two wheels share one player", () => {
+  const room = live(), [p] = room.players;
+  p.x = 600; p.y = 400; p.wheels = 2; p.evolved[1] = true;
+  p.wheelAngle = Math.PI / 2;
+  const wheels = snapshot(room).effects.filter(e => e.kind === "fire-wheel");
+  assert.deepEqual(wheels.map(e => e.orbitAngle), [Math.PI / 2, 3 * Math.PI / 2]);
+  assert.deepEqual(wheels.map(e => [Math.round(e.x), Math.round(e.y)]), [[600, 496], [600, 304]]);
+});
