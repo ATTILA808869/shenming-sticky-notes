@@ -5,7 +5,7 @@ if (process.env.VERCEL_ENV === "production") {
   if (!/^postgres(?:ql)?:\/\//.test(process.env.DATABASE_URL ?? "")) {
     throw new Error("The production PostgreSQL connection is not configured.");
   }
-  for (const file of ["nezha-social-001.sql", "nezha-moderation-001.sql"]) {
+  for (const file of ["nezha-social-001.sql", "nezha-moderation-001.sql", "nezha-billboard-001.sql"]) {
     const { error, status } = spawnSync(process.execPath, [
       require.resolve("prisma/build/index.js"), "db", "execute",
       "--schema", join(__dirname, "schema.prisma"),

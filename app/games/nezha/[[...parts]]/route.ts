@@ -9,6 +9,7 @@ import { getGameProfile, recordTowerCheckpoint, recordTowerEntry, selectGameChar
 import { gmAuthorized, gmCookie, gmPath, gmSessionSeconds, listGmRecords, loginGm, updateGmRecord } from "@/lib/nezha/gm";
 import { readSocial, socialRelease, writeSocial } from "@/lib/nezha/social";
 import { battleConnection, battleTicket, saveBattleResult } from "@/lib/nezha/battle";
+import { billboardBodyLimit, listBillboard, readBillboardImage, updateBillboard } from "@/lib/nezha/billboard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ const assetTypes = {
   "game.html": "text/html; charset=utf-8",
   "gm.html": "text/html; charset=utf-8",
   "social.js": "application/javascript; charset=utf-8",
+  "lobby-billboard.js": "application/javascript; charset=utf-8",
   "battle.html": "text/html; charset=utf-8",
   "battle.js": "application/javascript; charset=utf-8",
   "battle-rules.js": "application/javascript; charset=utf-8",
@@ -47,6 +49,9 @@ const assetTypes = {
   "skill-fx-water.png": "image/png",
   "skill-fx-slipper.png": "image/png",
   "skill-fx-items.png": "image/png",
+  "skill-icon-qiankun.png": "image/png",
+  "skill-icon-fan.png": "image/png",
+  "skill-icon-gourd.png": "image/png",
   "battle-ui.js": "application/javascript; charset=utf-8",
   "battle-ui.css": "text/css; charset=utf-8",
   "nezha.webp": "image/webp",
@@ -89,7 +94,7 @@ function setGmCookie(response: NextResponse, request: NextRequest, token: string
   return response;
 }
 
-async function readData(request: NextRequest): Promise<Record<string, unknown>> {
+async function readData(request: NextRequest, limit = 4096): Promise<Record<string, unknown>> {
   const origin = request.headers.get("origin");
   const host = request.headers.get("host") ?? request.nextUrl.host;
   const expectedOrigin = `${isHttps(request) ? "https" : "http"}://${host}`;
@@ -110,7 +115,7 @@ async function readData(request: NextRequest): Promise<Record<string, unknown>> 
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 4096) {
+      if (size > limit) {
         await reader.cancel();
         throw new GameError(413, "資料太長。");
       }
@@ -142,6 +147,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         return await asset("gm.html");
       case "gm/api/session":
         return json({ authenticated: gmAuthorized(request) });
+      case "gm/api/billboard":
+        if (!gmAuthorized(request)) throw new GameError(401, "請登入 GM 後台。");
+        return json(await listBillboard(true, request.nextUrl.searchParams));
       case "gm/api/chat":
       case "gm/api/comments":
       case "gm/api/reports":
@@ -164,6 +172,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       case "nezha-sheet.png":
       case "jigong-attack-sheet.png":
       case "social.js":
+      case "lobby-billboard.js":
       case "battle.js":
       case "battle-rules.js":
       case "battle-combat.js":
@@ -175,6 +184,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       case "skill-fx-water.png":
       case "skill-fx-slipper.png":
       case "skill-fx-items.png":
+      case "skill-icon-qiankun.png":
+      case "skill-icon-fan.png":
+      case "skill-icon-gourd.png":
       case "battle-ui.js":
       case "battle-ui.css":
         if ((await gameSession(request))?.account.nickname) return await asset(path);
@@ -194,7 +206,15 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         if ((await gameSession(request))?.account.nickname) return json({ messages: await getLobbyMessages() });
         break;
       }
+      case "api/billboard":
+        if ((await gameSession(request))?.account.nickname) return json(await listBillboard());
+        break;
       default:
+        if (/^(?:gm\/)?api\/billboard-image\/[^/]+$/.test(path)) {
+          const gm = path.startsWith("gm/");
+          if (gm ? !gmAuthorized(request) : !(await gameSession(request))?.account.nickname) break;
+          return await readBillboardImage(path.split("/").at(-1)!, gm);
+        }
         if (/^api\/social\/(?:state|profile|friends|whispers|party)$/.test(path)) {
           const session = await gameSession(request);
           if (!session?.account.nickname) break;
@@ -211,6 +231,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   const path = (await params).parts?.join("/");
   try {
+    if (path === "gm/api/billboard") {
+      if (!gmAuthorized(request)) throw new GameError(401, "請登入 GM 後台。");
+      await updateBillboard(await readData(request, billboardBodyLimit));
+      return json({ ok: true });
+    }
     const data = await readData(request);
     if (path === "gm/api/login") return setGmCookie(json({ ok: true }), request, await loginGm(request, data.username, data.password), gmSessionSeconds);
     if (path === "gm/api/logout") return setGmCookie(json({ ok: true }), request, "", 0);

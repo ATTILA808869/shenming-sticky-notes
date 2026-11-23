@@ -6,6 +6,13 @@ const img = (text: string, bg = "FFE2CF") =>
   `https://placehold.co/900x900/${bg}/2E2A27/png?text=${encodeURIComponent(text)}`;
 
 async function main() {
+  await prisma.nezhaBillboard.createMany({
+    skipDuplicates: true,
+    data: [
+      { id: "official-brand", title: "神明便利貼品牌消息", kind: "notice", targetUrl: "https://shenming-sticky-notes.vercel.app/blog", assetPath: "/images/line-sticker-zhongshen-cover.png", published: true },
+      { id: "official-tee", title: "神明有在看文創 T-SHIRT", kind: "ad", targetUrl: "https://lin.ee/Po1DyM0", assetPath: "/images/shenming-watching-tee-01.jpg", sortOrder: 10, published: true }
+    ]
+  });
   const existingCategories = await prisma.category.count();
   if (existingCategories > 0) {
     console.log("Database already has content. Skipping seed.");

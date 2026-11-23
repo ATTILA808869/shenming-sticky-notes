@@ -239,3 +239,19 @@ model NezhaRateLimit {
 
   @@index([expiresAt])
 }
+model NezhaBillboard {
+  id        String    @id @default(cuid())
+  title     String
+  kind      String
+  targetUrl String
+  sortOrder Int       @default(0)
+  published Boolean   @default(false)
+  assetPath String?
+  image     Bytes?
+  imageType String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([published, deletedAt, sortOrder])
+}

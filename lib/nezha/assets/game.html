@@ -37,6 +37,7 @@
 <script src="/games/nezha/skill-effects.js"></script>
 <script src="/games/nezha/enemy-art.js"></script>
 <script src="/games/nezha/battle-ui.js"></script>
+<script src="/games/nezha/lobby-billboard.js"></script>
 <script src="/games/nezha/social.js"></script>
 <script>
 const canvas = document.querySelector('#arena');
@@ -90,7 +91,6 @@ const {wheelOrbitRadius,wheelHitRadius,wheelEvolutionScale,wheelKnockbackCooldow
   ringExplosionLife,wheelCooldown,jigongWindRadius,
   attackGainPerLevel,defenseGainPerLevel,milestoneLevels}=NezhaRules;
 const {radius:pickupRadius,bombKillLimit,bombFlashTime,magnetFlightTime,magnetPulseTime,maxMagnetFlights}=NezhaRules.loot;
-const skillTomeChance=.005;
 const {towerBaselineFloor,towerFloorGrowth,towerHealthBoost,towerDamageBoost,towerGuardians,towerGoal,storyWaves}=NezhaRules;
 const storyMobLimit=80;
 const projectilePlayerRadius=12;
@@ -100,7 +100,7 @@ let optionButtons=[];
 const miniBossChance=.30;
 let nextWave, waveSlots, miniBossKills, miniBossThreshold, gearRewards, nextRewardAt;
 const skillCombat=NezhaCombat.create(NezhaRules);
-let boss, nextBoss, elapsed, warnings, drops, wheelTrail, trailTimer;
+let boss, nextBoss, elapsed, warnings, drops;
 let enemyShots, nextEnemyAimAt;
 let magnetEffect;
 const camera={x:0,y:0};
@@ -149,7 +149,7 @@ function trackCamera(){
 function reset(){
   player={...NezhaRules.createCharacter(profile.character),x:mapWidth/2,y:mapHeight/2,deathCause:null,
     moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1,attackAt:-1};
-  mobs=[]; stars=[]; sparks=[]; warnings=[]; drops=[]; wheelTrail=[]; trailTimer=0;skillCombat.reset();
+  mobs=[]; stars=[]; sparks=[]; warnings=[]; drops=[];skillCombat.reset();
   enemyShots=[];nextEnemyAimAt=0;
   magnetEffect=null;
   unlockToastUntil=0;
@@ -601,6 +601,8 @@ function showLobby(){
   tower.textContent='從無限塔第 1 層開始';
   tower.onclick=event=>void start(event,true);
   actions.append(play,tower);
+  const billboard=document.createElement('section');billboard.className='lobby-billboard';billboard.hidden=true;
+  billboard.setAttribute('aria-labelledby','billboard-title');actions.after(billboard);
   refreshLobbyPlay();
 
   let active,controller;
@@ -620,6 +622,7 @@ function showLobby(){
       content.replaceChildren();
       content.classList.toggle('lobby-chat-view',id==='chat');
       mount(content,controller.signal);
+      if(id==='home')mountLobbyBillboard(billboard,controller.signal);
     };
     nav.append(button);
     return button;
@@ -941,7 +944,7 @@ function enterFloor(){
   towerFloor++;floorKills=0;floorTime=0;spawn=.65;
   // Share one stat baseline so the 15% multiplier is the only growth from floor 5.
   if(towerFloor===towerBaselineFloor)towerBaseline=currentEnemyBalance();
-  boss=null;mobs=[];stars=[];drops=[];warnings=[];sparks=[];wheelTrail=[];skillCombat.reset();
+  boss=null;mobs=[];stars=[];drops=[];warnings=[];sparks=[];skillCombat.reset();
   enemyShots=[];nextEnemyAimAt=elapsed;
   magnetEffect=null;
   for(const skill of player.jigong)skill.castAt=null;
@@ -963,7 +966,7 @@ function floorCleared(rewardXP=0,tomeFound=false){
     choices.unshift(['學習 '+activeSkillNames()[missing],()=>chooseSkill(missing,()=>floorCleared(rewardXP,tomeFound))]);
   }
   const details=canLearnThird?(tomeText||'第三個法寶欄已解鎖。'):
-    rewardText+tomeText+'保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王。';
+    rewardText+tomeText+'保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王；尚未解鎖第三個法寶時，守關魔王有 5% 機率掉落絕世寶典。';
   const actions=panel(mainStory?'超級龍王退散！':'無限塔第 '+towerFloor+' 層通過',details,choices,true);
   if(canLearnThird)actions.classList.add('tome-actions');
   if(towerFloor===1&&checkpointRun)mountCheckpointStatus(card);
@@ -1226,12 +1229,6 @@ function update(dt){
   const flameWheel=player.wheels>0&&player.evolved[1];
   const hitRadius=wheelHitRadius*(flameWheel?wheelEvolutionScale:1);
   player.wheelAngle=(wheelStart+wheelSweep)%(2*Math.PI);
-  trailTimer-=dt;
-  if(flameWheel&&trailTimer<=0){
-    wheelTrail.push(...wheelPoints().map(({x,y})=>({x,y,life:.32})));
-    trailTimer=.035;
-  }
-  wheelTrail=wheelTrail.filter(flame=>(flame.life-=dt)>0);
   skillCombat.updateIngots(dt,enemies);
   player.wheelTimer-=dt;
   for(const enemy of enemies){
@@ -1335,7 +1332,7 @@ function update(dt){
         checkpointRun={runId:unlockRun,kills:floorKills};
         void saveTowerCheckpoint();
       }
-      const tomeFound=towerFloor>0&&!player.skillTome&&Math.random()<skillTomeChance;
+      const tomeFound=NezhaRules.rollSkillTome(player,towerFloor);
       if(tomeFound)player.skillTome=true;
       boss=null;
       const finishRewards=()=>continueAfterGearRewards(()=>floorCleared(rewardXP,tomeFound));
@@ -1426,7 +1423,6 @@ function ghost(enemy){
   const kind=isBoss?(enemy.at===rounds||towerFloor?'dragon':'boss'):enemy.mini?'mini':enemy.kind??'shade';
   combatArt.enemyActor(enemy,elapsed,kind,isBoss);
 }
-function drawIngot(x,y){combatArt.ingot(x,y);}
 function drawXpGem(x,y){NezhaWorldArt.gem(ctx,x,y);}
 function drawLootDrop(x,y,kind){NezhaWorldArt.drop(ctx,x,y,kind);}
 function drawMagnetPull(){
@@ -1475,10 +1471,7 @@ function draw(){
   for(const mob of mobs)if(mob.aim)drawEnemyAim(mob);
   for(const star of stars)drawXpGem(star.x,star.y);
   for(const drop of drops)drawLootDrop(drop.x,drop.y,drop.kind);
-  for(const ingot of ingots){
-    circle(ingot.x,ingot.y,22,'#ffe59225','#ffdb7a90',2);
-    drawIngot(ingot.x,ingot.y);
-  }
+  for(const ingot of ingots)combatArt.ingot(ingot.x,ingot.y);
   for(const mob of mobs){
     if(mob.x<view.x-65||mob.x>view.x+view.width+65||mob.y<view.y-65||mob.y>view.y+view.height+65)continue;
     ghost(mob);
@@ -1488,7 +1481,6 @@ function draw(){
   for(const shot of jigongShots)drawJigongShot(shot);
   for(const shot of shots)if(shot.lag<=0)combatArt.ring(shot,elapsed);
   const wheelScale=player.wheels&&player.evolved[1]?wheelEvolutionScale:1;
-  for(const flame of wheelTrail)combatArt.flame(flame,wheelScale);
   for(const wheel of wheelPoints())combatArt.wheel(wheel,wheelScale);
   for(const brick of bricks)combatArt.brick(brick);
   drawMagnetPull();
@@ -1511,12 +1503,8 @@ function draw(){
       const y=spark.y-30-(bossXPNoticeTime-spark.life)*26;
       const label='+'+spark.value+' XP';
       ctx.strokeText(label,spark.x,y);ctx.fillText(label,spark.x,y);ctx.restore();
-    }else if(spark.kind==='ring-burst'){
-      const fade=spark.life/ringExplosionLife;
-      ctx.save();ctx.globalAlpha=fade;
-      circle(spark.x,spark.y,spark.r,'#f57a4d22','#ffe19a',2);
-      starShape(spark.x,spark.y,Math.min(28,spark.r*.52)*(1+(1-fade)*.25),'#ffb96f');
-      ctx.restore();
+    }else if(spark.kind==='ring-burst'||spark.kind==='brick-impact'){
+      combatArt.skillBurst(spark,spark.kind==='ring-burst'?ringExplosionLife:.45);
     }else if(spark.kind==='bomb'){
       NezhaWorldArt.bomb(ctx,spark,bombFlashTime);
     }else if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);

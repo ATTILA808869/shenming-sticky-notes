@@ -101,6 +101,24 @@ test("boss XP queues individual upgrades and each upgrade can be selected only o
   assert.equal(pendingReward(a).options.length, 7);
 });
 
+test("the tower guardian gives each eligible player a 5% tome roll", () => {
+  assert.equal(R.rollSkillTome({ skillTome: false }, 0, () => 0), false);
+  assert.equal(R.rollSkillTome({ skillTome: true }, 1, () => 0), false);
+  assert.equal(R.rollSkillTome({ skillTome: false }, 1, () => .05), false);
+  assert.equal(R.rollSkillTome({ skillTome: false }, 1, () => .049999), true);
+  const room = live(), [a, b] = room.players;
+  room.nextSpawn = Infinity;
+  room.floor = 1;
+  room.floorKills = R.towerGoal;
+  step(room);
+  room.boss.hp = 0;
+  const rolls = [.049, .05];
+  room.random = () => rolls.shift() ?? .99;
+  step(room);
+  assert.deepEqual([a.skillTome, b.skillTome], [true, false]);
+  assert.equal(room.cleared, 1);
+});
+
 test("mini reward provides only four gears; solo rules still enforce health and movement caps", () => {
   const room = live(), [a, b] = room.players;
   a.gearRewards = 1;
@@ -293,7 +311,7 @@ test("both players can walk out of each other's view without a shared-camera tet
   assert.equal(state.state, "live");
 });
 
-test("the shared HUD receives the wheel cooldown and relayed flame effects after a hit", () => {
+test("the shared HUD receives the wheel cooldown without sending legacy flame trails", () => {
   const room = live(), [p, ally] = room.players;
   room.nextSpawn = Infinity;
   p.qi.timer = ally.qi.timer = 10;
@@ -302,7 +320,8 @@ test("the shared HUD receives the wheel cooldown and relayed flame effects after
     speed: 0, attack: 8, kind: "shade", stun: 0, flash: 0, contact: new Map(), wheels: new Map(), rangedReadyAt: Infinity });
   step(room);
   assert.equal(snapshot(room).players[0].wheelTimer, R.wheelCooldown);
-  assert.ok(snapshot(room).effects.some(e => e.kind === "wheel-trail" && e.life > 0));
+  assert.ok(snapshot(room).effects.some(e => e.kind === "fire-wheel"));
+  assert.ok(snapshot(room).effects.every(e => e.kind !== "wheel-trail"));
   step(room);
   assert.ok(snapshot(room).players[0].wheelTimer < R.wheelCooldown);
 });

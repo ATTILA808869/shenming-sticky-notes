@@ -26,6 +26,7 @@ small{display:block;color:var(--dim);margin-top:3px}.row-actions button{font-siz
 .danger{color:#ffc8be;border-color:#985b55}
 dialog{width:min(390px,calc(100% - 24px));max-height:85svh;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:6px;background:var(--row);color:var(--ink)}
 dialog::backdrop{background:#091417b8}dialog h2{margin:0 0 5px}dialog label{display:grid;gap:6px;margin-top:12px}
+#banner-dialog{width:min(520px,calc(100% - 24px))}.banner-preview{display:block;width:124px;height:60px;object-fit:contain;background:#122228;border:1px solid var(--line);border-radius:4px}.banner-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(max-width:500px){main{padding:12px}h1{font-size:20px}.controls label{flex-basis:200px}}
 </style>
 <main>
@@ -43,6 +44,7 @@ dialog::backdrop{background:#091417b8}dialog h2{margin:0 0 5px}dialog label{disp
     <form id="search" class="controls">
       <label><input type="search" id="query" maxlength="80" aria-label="搜尋關鍵字" placeholder="搜尋關鍵字"></label>
       <button type="submit">搜尋</button><button type="button" id="reload">重新整理</button>
+      <button type="button" id="banner-add" class="primary" hidden>新增橫幅</button>
     </form>
     <p id="status" role="status"></p>
     <div class="table" tabindex="0" aria-labelledby="section-name"><table><thead></thead><tbody></tbody></table></div>
@@ -56,6 +58,21 @@ dialog::backdrop{background:#091417b8}dialog h2{margin:0 0 5px}dialog label{disp
     <div class="controls"><button id="action-cancel" type="button">取消</button><button id="action-save" type="submit" class="primary">確認</button></div>
   </form>
 </dialog>
+<dialog id="banner-dialog" aria-labelledby="banner-heading">
+  <form id="banner-form">
+    <h2 id="banner-heading"></h2>
+    <label>標題<input id="banner-title" required maxlength="70"></label>
+    <div class="banner-fields">
+      <label>分類<select id="banner-kind"><option value="ad">廣告</option><option value="notice">公告</option></select></label>
+      <label>排序（小到大）<input id="banner-order" type="number" min="0" max="999" required></label>
+    </div>
+    <label>點擊連結（HTTPS）<input id="banner-url" type="url" required maxlength="1024"></label>
+    <label>橫幅圖片（PNG、JPG、WebP，1 MB 內）<input id="banner-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+    <img id="banner-current" class="banner-preview" alt="目前的橫幅" hidden>
+    <p id="banner-status" role="status"></p>
+    <div class="controls"><button type="button" id="banner-cancel">取消</button><button type="submit" id="banner-save" class="primary">儲存</button></div>
+  </form>
+</dialog>
 <script>
 const byId=id=>document.getElementById(id);
 const login=byId('login'),logout=byId('logout'),dashboard=byId('dashboard'),status=byId('status');
@@ -63,13 +80,16 @@ const nav=dashboard.querySelector('nav'),body=document.querySelector('tbody'),he
 const query=byId('query'),prev=byId('prev'),next=byId('next');
 const actionDialog=byId('action-dialog'),actionForm=byId('action-form');
 const actionSave=byId('action-save'),actionCancel=byId('action-cancel');
+const bannerDialog=byId('banner-dialog'),bannerForm=byId('banner-form'),bannerFile=byId('banner-file');
+const bannerSave=byId('banner-save'),bannerCancel=byId('banner-cancel'),bannerStatus=byId('banner-status');
 const formatter=new Intl.DateTimeFormat('zh-TW',{dateStyle:'short',timeStyle:'short'});
 const muteOptions=[[10,'10 分鐘'],[60,'1 小時'],[1440,'24 小時'],[10080,'7 天']];
 const views={
   chat:{name:'聊天紀錄',columns:['玩家','訊息','狀態','處理']},
   reports:{name:'密語檢舉',columns:['發送者／檢舉人','被檢舉訊息','處理紀錄','操作']},
   comments:{name:'排行榜留言',columns:['玩家','留言','狀態','處理']},
-  accounts:{name:'玩家帳號',columns:['玩家','遊戲紀錄','狀態','處理']}
+  accounts:{name:'玩家帳號',columns:['玩家','遊戲紀錄','狀態','處理']},
+  billboard:{name:'廟埕布告欄',columns:['橫幅','標題與連結','刊登狀態','操作']}
 };
 const reportReasons={harassment:'騷擾或辱罵',spam:'洗版或可疑廣告',other:'其他'};
 let section='chat',page=1,term='',signedIn=false,revision=0;
@@ -84,6 +104,7 @@ async function request(route,data){
 function showLogin(message=''){
   signedIn=false;revision++;dashboard.hidden=logout.hidden=true;login.hidden=false;
   if(actionDialog.open)actionDialog.close();
+  if(bannerDialog.open)bannerDialog.close();
   body.replaceChildren();byId('password').value='';byId('login-status').textContent=message;
 }
 function showDashboard(){signedIn=true;login.hidden=true;dashboard.hidden=logout.hidden=false;void load();}
@@ -156,10 +177,52 @@ function drawNicknameHistory(cell,changes){
   }
   details.append(summary,list);cell.append(details);
 }
+bannerCancel.onclick=()=>bannerDialog.close();
+bannerDialog.addEventListener('cancel',event=>{if(bannerSave.disabled)event.preventDefault();});
+function editBanner(item){
+  bannerForm.reset();bannerStatus.textContent='';
+  byId('banner-heading').textContent=item?'編輯橫幅':'新增橫幅';
+  byId('banner-title').value=item?.title??'';byId('banner-kind').value=item?.kind??'ad';
+  byId('banner-order').value=item?.sortOrder??10;byId('banner-url').value=item?.targetUrl??'';
+  const image=byId('banner-current');image.hidden=!item?.imageUrl;
+  if(item?.imageUrl)image.src=item.imageUrl;else image.removeAttribute('src');
+  bannerFile.required=!item;
+  bannerForm.onsubmit=async event=>{
+    event.preventDefault();bannerSave.disabled=bannerCancel.disabled=true;bannerStatus.textContent='';
+    try{
+      const file=bannerFile.files[0];
+      if(file?.size>1024*1024)throw new Error('圖片大小不得超過 1 MB。');
+      const image=file?await new Promise((resolve,reject)=>{
+        const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);
+        reader.onerror=()=>reject(new Error('無法讀取圖片。'));reader.readAsDataURL(file);
+      }):undefined;
+      await request('billboard',{action:'save',id:item?.id,title:byId('banner-title').value,kind:byId('banner-kind').value,
+        sortOrder:byId('banner-order').valueAsNumber,targetUrl:byId('banner-url').value,image});
+      bannerDialog.close();
+      if(signedIn&&section==='billboard')await load(item?'已儲存橫幅。':'已建立草稿，點「發布」即可上架。');
+    }catch(error){bannerStatus.textContent=error.message;}
+    finally{bannerSave.disabled=bannerCancel.disabled=false;}
+  };
+  bannerDialog.showModal();byId('banner-title').focus();
+}
+byId('banner-add').onclick=()=>editBanner();
+function drawBannerRow(row,item){
+  const preview=row.insertCell();
+  if(item.imageUrl){const image=document.createElement('img');image.src=item.imageUrl;image.alt='';image.className='banner-preview';preview.append(image);}
+  addCell(row,item.title,item.targetUrl);
+  addCell(row,item.published?'刊登中':'未刊登',(item.kind==='ad'?'廣告':'公告')+' · 排序 '+item.sortOrder);
+  const actions=document.createElement('div');actions.className='row-actions';
+  const edit=document.createElement('button');edit.type='button';edit.textContent='編輯';edit.onclick=()=>editBanner(item);
+  actions.append(edit);
+  offer(actions,item.id,item.published?'unpublish':'publish',item.published?'下架':'發布');
+  offer(actions,item.id,'delete','刪除',{confirmText:'確定刪除「'+item.title+'」？此操作無法還原。',danger:true});
+  row.insertCell().append(actions);
+}
 function drawRows(rows){
   body.replaceChildren();
   for(const item of rows){
     const row=body.insertRow();
+    if(section==='billboard'){drawBannerRow(row,item);continue;}
     const account=item.whisper?.sender??item.account??item;
     const {username,nickname}=account;
     const identity=addCell(row,nickname||'尚未設定暱稱',username);
@@ -208,6 +271,7 @@ async function load(done=''){
   const view=views[section];
   byId('section-name').textContent=view.name;byId('page-number').textContent='第 '+page+' 頁';
   query.placeholder=section==='accounts'?'帳號、暱稱或舊暱稱':'搜尋關鍵字';
+  byId('banner-add').hidden=section!=='billboard';
   for(const button of nav.children){if(button.dataset.view===section)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}
   head.replaceChildren();const header=head.insertRow();
   for(const title of view.columns){const col=document.createElement('th');col.scope='col';col.textContent=title;header.append(col);}

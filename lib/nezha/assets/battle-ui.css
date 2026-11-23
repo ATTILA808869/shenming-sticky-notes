@@ -66,6 +66,20 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!important}
 html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
 .card.lobby-hub{width:min(650px,100%);height:min(550px,100%);display:flex;flex-direction:column;text-align:left}
+.card.lobby-hub:has(.lobby-billboard:not([hidden])){height:min(650px,100%)}
+.lobby-billboard{flex:none;margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+.billboard-bar,.billboard-controls{display:flex;align-items:center;gap:5px}
+.billboard-bar{justify-content:space-between;margin-bottom:5px}
+.billboard-bar h2{font-size:16px;margin:0;color:var(--gold)}
+.billboard-controls{flex:none}.billboard-controls button{width:30px;height:32px;padding:0;box-shadow:none;font-size:16px}
+.billboard-count{min-width:46px;text-align:center;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.billboard-link{display:grid;grid-template-columns:minmax(77px,36%) minmax(0,1fr) auto;align-items:center;gap:9px;height:99px;border:1px solid #ad8d5e;border-radius:4px;background:#152931;color:var(--ink);text-decoration:none;overflow:hidden;padding-right:10px;touch-action:pan-y}
+.billboard-link:hover,.billboard-link:focus-visible{background:#29434a;border-color:var(--gold)}
+.billboard-link img{display:block;width:100%;height:97px;object-fit:contain;background:#101f26}
+.billboard-copy{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}.billboard-copy span{font-size:12px;color:var(--gold)}
+.billboard-copy strong{font-size:15px;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.billboard-live{position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%)}
+@media(max-height:510px){.lobby-billboard{margin-top:6px;padding-top:4px}.billboard-link{height:62px}.billboard-link img{height:60px}}
 .lobby-hub>.actions,.lobby-nav{flex:none}
 #lobby-tower-start{background:#263c43;color:var(--gold);border-color:#ad8d5e}
 .lobby-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(62px,1fr));gap:5px;margin:12px 0;border-bottom:1px solid var(--line)}

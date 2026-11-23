@@ -31,7 +31,7 @@ function createRoom(roster, now = Date.now(), random = Math.random) {
       connected: false, disconnectedAt: null, dx: 0, dy: 0, heading: 0, facing: -1,
       attackFacing: -1, attackUntil: -1, attackAt: -1, pendingLevels: 0, gearRewards: 0,
       reward: null, revive: 0, safeUntil: 0, enteredTower: false, creditedFloor: 0, creditedKills: 0,
-      combat: Combat.create(R, random), wheelTrail: []
+      combat: Combat.create(R, random)
     }))
   };
 }
@@ -210,13 +210,8 @@ function playerAttacks(room, dt) {
     const start = p.wheelAngle, sweep = p.wheelSpeed * dt;
     p.wheelAngle = (start + sweep) % (Math.PI * 2);
     p.wheelTimer = Math.max(0, p.wheelTimer - dt);
-    p.wheelTrail = p.wheelTrail.filter(flame => (flame.life -= dt) > 0);
     if (!active || !p.wheels) continue;
     const flaming = p.evolved[1], radius = R.wheelHitRadius * (flaming ? R.wheelEvolutionScale : 1);
-    if (flaming) for (let i = 0; i < p.wheels; i++) {
-      const { x, y } = R.wheelPoint(p, i);
-      p.wheelTrail.push({ x, y, life: .32 });
-    }
     for (const e of room.enemies) {
       if (e.hp <= 0 || room.time < (e.wheels.get(p.id) ?? 0) || !combat.wheelSweepsEnemy(e, start, sweep, radius)) continue;
       e.wheels.set(p.id, room.time + R.wheelCooldown); combat.damage(e, p.wheelDamage); p.wheelTimer = R.wheelCooldown;
@@ -444,7 +439,7 @@ function enterFloor(room, now) {
   room.magnetFlights = []; room.magnetPulses = []; room.bombBursts = []; room.pickupNotice = null;
   for (const p of room.players) {
     p.enteredTower ||= withinGrace(p, now);
-    p.combat.reset(); p.revive = 0; p.wheelTrail = [];
+    p.combat.reset(); p.revive = 0;
     for (const skill of p.jigong) skill.castAt = null;
     Object.assign(p, from(width / 2 + (p === room.players[0] ? -1 : 1) * 40, height / 2));
     heal(p, .25);
@@ -477,7 +472,7 @@ function settle(room, now) {
       addXP(room, p, (guardian.xp ?? 0) + remainingXP);
       if (room.floor) {
         p.creditedFloor = room.floor; p.creditedKills = room.kills;
-        if (!p.skillTome && room.random() < .005) {
+        if (R.rollSkillTome(p, room.floor, room.random)) {
           p.skillTome = true;
           if (p.reward?.title === "升級強化") p.reward = null;
         }
@@ -559,7 +554,6 @@ function snapshot(room) {
     for (const cast of jigongWindCasts) for (const { x, y } of cast.eyes) {
       effects.push({ x, y, kind: "eye", r: R.jigongWindRadius, startedAt: cast.startedAt });
     }
-    for (const flame of p.wheelTrail) effects.push({ ...flame, r: 20, kind: "wheel-trail" });
     if (available(p)) for (let i = 0; i < p.wheels; i++) {
       effects.push({ ...R.wheelPoint(p, i),
         r: R.wheelHitRadius * (p.evolved[1] ? R.wheelEvolutionScale : 1), kind: p.evolved[1] ? "fire-wheel" : "wheel" });
