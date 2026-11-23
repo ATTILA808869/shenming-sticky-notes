@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { authenticate, cookieName, GameError, gamePath, gameSession, limitAttempts, parseNickname, sessionSeconds } from "@/lib/nezha/session";
 import { getScores, saveLeaderboardMessage, saveScore } from "@/lib/nezha/scores";
 import { getLobbyMessages, sendLobbyMessage } from "@/lib/nezha/lobby";
-import { getGameProfile, recordTowerEntry, selectGameCharacter, startUnlockRun } from "@/lib/nezha/progress";
+import { getGameProfile, recordTowerCheckpoint, recordTowerEntry, selectGameCharacter, startUnlockRun } from "@/lib/nezha/progress";
 import { gmAuthorized, gmCookie, gmPath, gmSessionSeconds, listGmRecords, loginGm, updateGmRecord } from "@/lib/nezha/gm";
 
 export const runtime = "nodejs";
@@ -188,11 +188,12 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!session) throw new GameError(401, "請先登入。");
 
     const { account } = session;
-    if (path === "api/character" || path === "api/run/start" || path === "api/run/enter-tower") {
+    if (path === "api/character" || path === "api/run/start" || path === "api/run/enter-tower" || path === "api/run/tower-checkpoint") {
       if (!account.nickname) throw new GameError(403, "請先設定暱稱。");
       if (await limitAttempts(`${path}:${account.id}`, 16)) throw new GameError(429, "操作太頻繁，請稍後再試。");
       if (path === "api/character") return json(await selectGameCharacter(account.id, data.character));
       if (path === "api/run/start") return json(await startUnlockRun(account.id));
+      if (path === "api/run/tower-checkpoint") return json(await recordTowerCheckpoint(account.id, data.runId, data.kills));
       return json(await recordTowerEntry(account.id, data.runId));
     }
     if (path === "api/nickname") {

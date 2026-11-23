@@ -70,6 +70,7 @@ html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!importa
 html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
 .card.lobby-hub{width:min(650px,100%);height:min(550px,100%);display:flex;flex-direction:column;text-align:left}
 .lobby-hub>.actions,.lobby-nav{flex:none}
+#lobby-tower-start{background:#263c43;color:var(--gold);border-color:#ad8d5e}
 .lobby-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(62px,1fr));gap:5px;margin:12px 0;border-bottom:1px solid var(--line)}
 .lobby-nav button{min-width:0;min-height:40px;padding:6px 2px;background:transparent;color:var(--muted);border:0;border-bottom:3px solid transparent;box-shadow:none;font-size:14px}
 .lobby-nav button:hover:enabled{background:#29434a;color:var(--ink)}
@@ -227,7 +228,7 @@ const bossStages = [
   {at:480,name:'超級龍王',xp:1000,hp:870,attack:42,speed:87,r:49,color:'#61d9a5',interval:2.7}
 ];
 const maxMoveSpeed=100;
-const maxHealth=2000;
+const maxHealth=1000;
 const maxUpgradeLevel=25;
 const attackGainPerLevel=2;
 const defenseGainPerLevel=1;
@@ -281,6 +282,7 @@ const rangedAttacks={
 };
 const projectilePlayerRadius=12;
 const towerGoal=1000;
+const towerStartLevel=50,towerStartUpgrades=50,towerStartRewards=25;
 let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline;
 let optionButtons=[];
 const miniBossChance=.30;
@@ -296,7 +298,8 @@ let width, height, player, mobs, stars, sparks, time, spawn, kills, mode;
 let stick=null,pinch=null;
 let closeLobby = null;
 let runInProgress=false,lobbyDraft='';
-let profile={character:'nezha',jigongUnlocked:false,jigongEarned:false},unlockRun=null,towerEntryPending=false,unlockRequest=null;
+let profile={character:'nezha',jigongUnlocked:false,jigongEarned:false,towerStartUnlocked:false};
+let unlockRun=null,towerEntryPending=false,unlockRequest=null,checkpointRun=null,checkpointRequest=null;
 let unlockToastUntil=0;
 let characterRefresh=null,selectingCharacter=false,startingRun=false;
 const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
@@ -389,7 +392,7 @@ function panel(title,desc,choices,portrait=false){
   actions.querySelector('button:enabled')?.focus({preventScroll:true});
   return actions;
 }
-async function start(event){
+async function start(event,fromTower=false){
   if(startingRun||selectingCharacter)return;
   const source=event?.currentTarget,fromMode=mode;
   const current=()=>mode===fromMode&&(!source||source.isConnected);
@@ -404,9 +407,15 @@ async function start(event){
     if(!account.nickname){location.replace('/games/nezha');return;}
     updateLobbyAccount(account);
     if(!characterSheet(profile.character).naturalWidth){if(mode!=='lobby')showLobby();return;}
-    reset();runInProgress=true;setMode('play');
-    unlockRun=profile.jigongEarned?null:accountRequest('run/start',{}).then(({runId})=>runId).catch(()=>null);
+    if(checkpointRun&&!(await saveTowerCheckpoint()))throw new Error('塔起點尚未儲存，請稍後重試。');
+    if(fromTower&&!profile.towerStartUnlocked)throw new Error('請先通過無限塔第 1 層。');
+    const runId=profile.towerStartUnlocked?null:(await accountRequest('run/start',{})).runId;
+    if(!current())return;
+    reset();runInProgress=true;
+    unlockRun=runId;
     towerEntryPending=false;
+    if(fromTower)configureTowerStart();
+    else setMode('play');
   }catch(error){
     if(current()){
       if(!status){status=document.createElement('p');status.id='start-status';status.setAttribute('role','status');card.append(status);}
@@ -423,7 +432,8 @@ function togglePause(){
     setMode('paused');
     const resume=()=>setMode('play');
     panel('休息一下','準備好就回廟埕繼續玩。',[
-      ['繼續遊戲',resume],['重新開始',start],['回到大廳',showLobby]
+      ['繼續遊戲',resume],['從頭重新開始',start],
+      ...(profile.towerStartUnlocked?[['從無限塔第 1 層重新開始',event=>start(event,true)]]:[]),['回到大廳',showLobby]
     ]);
   }else if(mode==='paused')setMode('play');
 }
@@ -789,38 +799,37 @@ function gearUpgradeChoices(resume=()=>setMode('play')){
   const options=[];
   function add(index,label,apply){
     const level=player.gear[index];
-    if(level<maxUpgradeLevel&&apply)options.push([gearNames[index]+' Lv.'+(level+1)+'・'+label,()=>{
+    if(apply)options.push([gearNames[index]+' Lv.'+(level+1)+'・'+label,()=>{
       player.gear[index]++;
       apply();
     }]);
-    else options.push([gearNames[index]+'・已達上限',null]);
+    else options.push([gearNames[index]+'・'+label,null]);
   }
   add(3,'攻擊力＋'+swordAttackGain,()=>player.attack+=swordAttackGain);
   const speedGain=Math.min(4,maxMoveSpeed-player.speed);
-  add(2,'移動速度＋'+speedGain,speedGain>0?()=>player.speed+=speedGain:null);
+  add(2,speedGain>0?'移動速度＋'+speedGain:'移速已達 '+maxMoveSpeed,speedGain>0?()=>player.speed+=speedGain:null);
   add(1,'防禦力＋'+armorDefenseGain,()=>player.defense+=armorDefenseGain);
-  // The 25 health upgrades add up to 1,900 HP.
   const healthGain=Math.min(28+4*player.gear[0],maxHealth-player.maxHp);
-  add(0,'最大與目前血量＋'+healthGain,healthGain>0?()=>{
+  add(0,healthGain>0?'最大與目前血量＋'+healthGain:'回復 60% 最大血量',healthGain>0?()=>{
     player.maxHp+=healthGain;
     player.hp=Math.min(player.maxHp,player.hp+healthGain);
-  }:null);
+  }:()=>heal(.6));
   return options.map(([label,apply])=>[label,apply?()=>{apply();applyEvolutions();resume();}:null]);
 }
-function continueAfterGearRewards(resume=()=>setMode('play')){
-  if(!showGearReward(resume))resume();
+function continueAfterGearRewards(resume=()=>setMode('play'),towerSetup=false){
+  if(!showGearReward(resume,towerSetup))resume();
 }
-function showGearReward(resume=()=>setMode('play')){
+function showGearReward(resume=()=>setMode('play'),towerSetup=false){
   if(gearRewards<=0)return false;
-  const upgrades=gearUpgradeChoices(()=>continueAfterGearRewards(resume));
-  if(!upgrades.some(([,apply])=>apply)){gearRewards=0;return false;}
+  const upgrades=gearUpgradeChoices(()=>continueAfterGearRewards(resume,towerSetup));
   gearRewards--;
   nextRewardAt=elapsed+rewardInterval;
   setMode('upgrade');
-  panel('小魔王戰利品','選一件道具強化'+characterNames[player.character]+'。',upgrades);
+  const title=towerSetup?'塔起點・小魔王戰利品 '+(towerStartRewards-gearRewards)+' / '+towerStartRewards:'小魔王戰利品';
+  panel(title,'選一件道具強化'+characterNames[player.character]+'。',upgrades);
   return true;
 }
-function showUpgrades(resume=()=>setMode('play')){
+function showUpgrades(resume=()=>setMode('play'),setupChoice=0){
   const options=gearUpgradeChoices(resume);
   const openSlot=hasFreeSkillSlot();
   const requirements=activeEvolutionGear();
@@ -862,17 +871,14 @@ function showUpgrades(resume=()=>setMode('play')){
     upgradeQi('人物攻擊力＋'+qiAttackGain,()=>player.attack+=qiAttackGain);
     options.push(rollUpgradeOption(qiOptions));
   }else options.push(['基礎氣功・已達上限',null]);
-  if(!options.some(([,apply])=>apply))return false;
   setMode('upgrade');
   const milestone=player.level%milestoneLevels===0?'總攻擊力與總防禦力再＋5%。':'';
-  const actions=panel('升到 '+player.level+' 級','攻擊力＋'+attackGainPerLevel+'、防禦力＋'+defenseGainPerLevel+'。'+milestone,options);
+  const title=setupChoice?'塔起點・升級配點 '+setupChoice+' / '+towerStartUpgrades:'升到 '+player.level+' 級';
+  const detail=setupChoice?'起始等級 '+towerStartLevel+'・選擇一項強化。':'攻擊力＋'+attackGainPerLevel+'、防禦力＋'+defenseGainPerLevel+'。'+milestone;
+  const actions=panel(title,detail,options);
   actions.classList.add('level-up-actions');
-  return true;
 }
-function advanceLevel(){
-  const requiredXP=needed();
-  if(player.xp<requiredXP)return false;
-  player.xp-=requiredXP;
+function gainLevel(){
   player.level++;
   player.attack+=attackGainPerLevel;
   player.defense+=defenseGainPerLevel;
@@ -880,15 +886,31 @@ function advanceLevel(){
     player.attack*=milestoneStatFactor;
     player.defense*=milestoneStatFactor;
   }
+}
+function advanceLevel(){
+  const requiredXP=needed();
+  if(player.xp<requiredXP)return false;
+  player.xp-=requiredXP;
+  gainLevel();
   nextRewardAt=elapsed+rewardInterval;
   return true;
 }
 function continueLevelUps(resume){
-  while(advanceLevel()){
+  if(advanceLevel()){
     // Each choice applies before calculating the next level's stats or available cards.
-    if(showUpgrades(()=>continueLevelUps(resume)))return;
+    showUpgrades(()=>continueLevelUps(resume));
+  }else resume();
+}
+function configureTowerStart(){
+  time=rounds;
+  while(player.level<towerStartLevel)gainLevel();
+  gearRewards=towerStartRewards;
+  let choice=0;
+  function allocate(){
+    if(choice<towerStartUpgrades)showUpgrades(allocate,++choice);
+    else continueAfterGearRewards(enterFloor,true);
   }
-  resume();
+  allocate();
 }
 function spendSavedXP(){
   if(mode==='play'&&player.xp>=needed())continueLevelUps(()=>setMode('play'));
@@ -913,6 +935,11 @@ function refreshLobbyPlay(){
   const failed=profile.character==='jigong'?jigongSheetFailed:heroSheetFailed;
   button.disabled=!runInProgress&&(startingRun||selectingCharacter||!failed&&!characterSheet(profile.character).naturalWidth);
   button.textContent=runInProgress?'繼續遊戲':startingRun?'確認角色中…':selectingCharacter?'套用角色中…':failed?'重試載入角色':button.disabled?'角色載入中…':'開始守廟埕';
+  const tower=card.querySelector('#lobby-tower-start');
+  if(tower){
+    tower.hidden=runInProgress||!profile.towerStartUnlocked;
+    tower.disabled=button.disabled||failed;
+  }
 }
 function retryCharacterImage(character){
   if(character==='jigong'){jigongSheetFailed=false;jigongSheet.src=jigongSheetUrl+'?retry='+Date.now();}
@@ -927,29 +954,55 @@ function updateGameProfile(next){
 function updateLobbyAccount({nickname,profile:next}){
   const label=document.querySelector('#nickname');
   setText(label,nickname);label.title=nickname;
-  if(next&&(next.character!==profile.character||next.jigongUnlocked!==profile.jigongUnlocked||next.jigongEarned!==profile.jigongEarned))updateGameProfile(next);
+  if(next&&(next.character!==profile.character||next.jigongUnlocked!==profile.jigongUnlocked||next.jigongEarned!==profile.jigongEarned||Boolean(next.towerStartUnlocked)!==Boolean(profile.towerStartUnlocked)))updateGameProfile(next);
 }
 async function saveTowerUnlock(){
-  if(profile.jigongEarned||!towerEntryPending||unlockRequest)return;
-  const current=unlockRun;
+  if(profile.jigongEarned||!towerEntryPending||!unlockRun)return;
+  if(unlockRequest)return unlockRequest;
+  const runId=unlockRun;
   unlockRequest=(async()=>{
     try{
-      const runId=await current;
-      if(!runId)throw new Error('本局的解鎖紀錄沒有成功建立。');
       const next=await accountRequest('run/enter-tower',{runId});
       const newlyUnlocked=!profile.jigongUnlocked&&next.jigongUnlocked;
       updateGameProfile(next);
-      towerEntryPending=false;
+      if(unlockRun===runId)towerEntryPending=false;
       if(newlyUnlocked)unlockToastUntil=elapsed+6;
       requestFrame();
-    }catch{
-      if(unlockRun===current)towerEntryPending=true;
-    }
+    }catch{ /* Keep the pending entry for a later retry. */ }
   })();
   characterRefresh?.();
   await unlockRequest;
   unlockRequest=null;
   characterRefresh?.();
+}
+function saveTowerCheckpoint(){
+  if(profile.towerStartUnlocked){checkpointRun=null;return Promise.resolve(true);}
+  if(checkpointRequest)return checkpointRequest;
+  if(!checkpointRun)return Promise.resolve(false);
+  const record=checkpointRun;
+  checkpointRequest=(async()=>{
+    await saveTowerUnlock();
+    const next=await accountRequest('run/tower-checkpoint',record);
+    if(!next.towerStartUnlocked)return false;
+    updateGameProfile(next);
+    checkpointRun=null;
+    return true;
+  })().catch(()=>false).finally(()=>{checkpointRequest=null;});
+  return checkpointRequest;
+}
+function mountCheckpointStatus(container){
+  const status=document.createElement('p');status.setAttribute('role','status');
+  const retry=document.createElement('button');retry.type='button';retry.textContent='重試儲存塔起點';
+  async function save(){
+    retry.hidden=true;
+    status.textContent='正在儲存無限塔起點…';
+    const saved=await saveTowerCheckpoint();
+    status.textContent=saved?'已解鎖無限塔第 1 層起點。':'未能儲存塔起點，請重試。';
+    retry.hidden=saved;
+  }
+  retry.onclick=save;
+  container.append(status,retry);
+  void save();
 }
 function showLobby(){
   closeLobby?.();
@@ -966,7 +1019,10 @@ function showLobby(){
     else if(profile.character==='jigong'?jigongSheetFailed:heroSheetFailed)retryCharacterImage(profile.character);
     else if(characterSheet(profile.character).naturalWidth)void start(event);
   };
-  actions.append(play);
+  const tower=document.createElement('button');tower.id='lobby-tower-start';tower.type='button';
+  tower.textContent='從無限塔第 1 層開始';
+  tower.onclick=event=>void start(event,true);
+  actions.append(play,tower);
   refreshLobbyPlay();
 
   let active,controller;
@@ -1002,6 +1058,7 @@ function mountLobbyHome(container){
   const character=runInProgress?player.character:profile.character;
   detail.textContent=runInProgress?characterNames[character]+' · 等級 '+player.level+' · '+(towerFloor?'無限塔第 '+towerFloor+' 層':'生存 '+formatTime(time)):characterNames[character]+' · 廟埕守護・無限塔';
   info.append(status,detail);banner.append(createHeroPortrait(character),info);container.append(banner);
+  if(checkpointRun)mountCheckpointStatus(container);
 }
 function mountLobbyCharacter(container,signal){
   lobbyHeading(container,'角色名冊');
@@ -1213,7 +1270,9 @@ function finish(won){
   const progress=towerFloor>clearedFloors?Math.min(floorKills,towerGoal):0;
   const record={cleared:clearedFloors,progress,kills};
   const replay=()=>finish(won);
-  const choices=[['再玩一局',start],['無限塔排行榜',()=>showLeaderboard(replay)]];
+  const choices=[['從頭再玩一局',start]];
+  if(profile.towerStartUnlocked)choices.push(['從無限塔第 1 層開始',event=>start(event,true)]);
+  choices.push(['無限塔排行榜',()=>showLeaderboard(replay)]);
   if(record.cleared>0)choices.push(['公開本局成績',async event=>{
     const button=event.currentTarget;button.disabled=true;
     const status=document.createElement('div');status.setAttribute('role','status');card.append(status);
@@ -1275,6 +1334,7 @@ function floorCleared(rewardXP=0,tomeFound=false){
     rewardText+tomeText+'保留法寶、等級與強化道具，進入下一層回復 25% 最大生命。每層擊倒 1,000 隻敵人召喚守關魔王。';
   const actions=panel(mainStory?'超級龍王退散！':'無限塔第 '+towerFloor+' 層通過',details,choices,true);
   if(canLearnThird)actions.classList.add('tome-actions');
+  if(towerFloor===1&&checkpointRun)mountCheckpointStatus(card);
 }
 function spawnTowerGuardian(){
   const guardian=towerGuardians[(towerFloor-1)%towerGuardians.length];
@@ -1876,6 +1936,10 @@ function update(dt){
     const rewardXP=boss.xp??0;
     player.xp+=rewardXP;
     if(towerFloor||nextBoss===bossStages.length){
+      if(towerFloor===1&&!profile.towerStartUnlocked&&unlockRun){
+        checkpointRun={runId:unlockRun,kills:floorKills};
+        void saveTowerCheckpoint();
+      }
       const tomeFound=towerFloor>0&&!player.skillTome&&Math.random()<skillTomeChance;
       if(tomeFound)player.skillTome=true;
       boss=null;
@@ -1895,7 +1959,7 @@ function update(dt){
   if(towerFloor&&!boss&&floorKills>=towerGoal)spawnTowerGuardian();
   sparks=sparks.filter(s=>(s.life-=dt)>0);
   if(showGearReward())return;
-  if(towerFloor||elapsed<nextRewardAt||(magnetEffect&&elapsed<magnetEffect.rewardAt))return;
+  if(elapsed<nextRewardAt||(magnetEffect&&elapsed<magnetEffect.rewardAt))return;
   if(advanceLevel())showUpgrades();
 }
 function circle(x,y,r,fill,stroke,line=2){
@@ -2394,6 +2458,11 @@ function setProgress(element,value,max=1){
   if(element.value!==next||!element.hasAttribute('value'))element.value=next;
 }
 const updateHistory=[
+  {date:'2026-11-23',title:'無限塔起點與高等升級調整',changes:[
+    ['無限塔起點','通過第 1 層後，帳號會記錄起點資格。新局可照常從廟埕開始，或直接從無限塔第 1 層開始。塔起點角色為 Lv.50，入場前可選 50 次升級配點及 25 次小魔王戰利品。'],
+    ['強化道具','神刀與神甲不設強化上限。神馬在移速到達 100 後停止強化。大魂丹的最大血量上限改為 1,000，到頂後每次選擇改為回復 60% 最大血量。'],
+    ['升級面板','修正無限塔累積足夠經驗值卻未自動升級，以及高等時升級選項用盡的問題。技能與氣功普攻仍維持 Lv.25 上限。']
+  ]},
   {date:'2026-11-23',title:'濟公禪師進化法寶再強化',changes:[
     ['開道鞋・八方神行鞋','拖鞋外觀與命中半徑調整為原版的 2 倍，進化後的來回飛行皆適用。'],
     ['伏魔回風扇','施放時在濟公周圍留下 10 個環形颶風眼，會吸引附近敵人，對大小魔王的拉力較弱。風眼持續 6 秒，每 0.5 秒造成清新扇基礎傷害的 60%；重疊不疊傷。'],

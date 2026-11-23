@@ -100,6 +100,7 @@ model NezhaAccount {
   selectedCharacter  String             @default("nezha")
   jigongUnlockedAt   DateTime?
   jigongGrantedAt    DateTime?
+  towerStartUnlockedAt DateTime?
   unlockRunId        String?
   unlockRunStartedAt DateTime?
   sessions           NezhaSession[]
