@@ -1,6 +1,22 @@
 const { createHmac, timingSafeEqual } = require("node:crypto");
 const { createServer } = require("node:http");
-const { createRoom, connect, disconnect, setInput, tick, snapshot } = require("./engine.cjs");
+const { createRoom, connect, disconnect, setInput, chooseReward, pendingReward, tick, snapshot } = require("./engine.cjs");
+
+function signResult(secret, p, now = Date.now()) {
+  if (!p?.enteredTower) return null;
+  const payload = Buffer.from(JSON.stringify({
+    player: p.id, cleared: p.creditedFloor, kills: p.creditedKills, expires: now + 5 * 60_000
+  })).toString("base64url");
+  const mac = createHmac("sha256", secret).update("nezha-battle-result:" + payload).digest("base64url");
+  return payload + "." + mac;
+}
+
+function playerView(base, p) {
+  const visible = item => Math.abs(item.x - p.x) <= 880 && Math.abs(item.y - p.y) <= 820;
+  return { ...base, enemies: base.enemies.filter(e => e.guardian || visible(e)),
+    bolts: base.bolts.filter(visible), loot: base.loot.filter(visible).slice(-280), effects: base.effects.filter(visible),
+    sparks: base.sparks.filter(visible), reward: pendingReward(p) };
+}
 
 function verifyTicket(secret, ticket, now = Date.now()) {
   if (typeof ticket !== "string" || ticket.length > 2048 || !/^[\w-]+\.[\w-]{43}$/.test(ticket)) return null;
@@ -25,7 +41,7 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
   const http = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      return res.end('{"ready":true}');
+      return res.end('{"ready":true,"battle":"tower-coop-v1"}');
     }
     res.writeHead(404);res.end();
   });
@@ -35,7 +51,7 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
     sockets.handleUpgrade(req, socket, head, ws => sockets.emit("connection", ws));
   });
   sockets.on("connection", ws => {
-    let joined, player, messages = 0, inputWindow = Date.now();
+    let joined, player, seat, messages = 0, inputWindow = Date.now();
     const handshaking = setTimeout(() => ws.close(4001, "join required"), 5000);
     ws.on("error", () => ws.terminate());
     ws.on("pong", () => { ws.alive = true; });
@@ -54,7 +70,10 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
       try { event = JSON.parse(data.toString()); } catch { return ws.close(4002, "invalid message"); }
       if (!event || typeof event !== "object") return ws.close(4002, "invalid message");
       if (joined) {
+        if (joined.clients.get(player) !== ws) return;
         if (event.type === "move") setInput(joined.room, player, event.x, event.y);
+        if (event.type === "pick") chooseReward(joined.room, player, event.rewardId, event.optionId);
+        if (event.type === "result") ws.send(JSON.stringify({ type: "result", proof: signResult(secret, seat, now), cleared: seat.creditedFloor }));
         return;
       }
       const ticket = event.type === "join" ? verifyTicket(secret, event.ticket, now) : null;
@@ -69,10 +88,11 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
       player = ticket.player;
       if (!connect(joined.room, player, now)) { joined = null; return ws.close(4004, "seat expired"); }
       const previous = joined.clients.get(player);
+      seat = joined.room.players.find(p => p.id === player);
       joined.clients.set(player, ws);
       previous?.close(4005, "joined elsewhere");
       clearTimeout(handshaking);
-      ws.send(JSON.stringify({ type: "joined", player, state: snapshot(joined.room) }));
+      ws.send(JSON.stringify({ type: "joined", player, state: playerView(snapshot(joined.room), seat) }));
     });
   });
   const clock = setInterval(() => {
@@ -85,8 +105,13 @@ function startBattleServer({ secret, origin, port, host, WebSocketServer }) {
         rooms.delete(id);continue;
       }
       if (entry.clients.size) {
-        const message = JSON.stringify({ type: "state", state: snapshot(entry.room) });
-        for (const client of entry.clients.values()) if (client.readyState === 1 && client.bufferedAmount < 64_000) client.send(message);
+        const base = snapshot(entry.room);
+        for (const p of entry.room.players) {
+          const client = entry.clients.get(p.id);
+          if (client?.readyState === 1 && client.bufferedAmount < 64_000) {
+            client.send(JSON.stringify({ type: "state", state: playerView(base, p) }));
+          }
+        }
       }
     }
   }, 50);
@@ -115,4 +140,4 @@ if (require.main === module) {
   http.on("listening", () => console.log("Nezha battle listening on port " + http.address().port));
 }
 
-module.exports = { verifyTicket, startBattleServer };
+module.exports = { verifyTicket, signResult, startBattleServer };

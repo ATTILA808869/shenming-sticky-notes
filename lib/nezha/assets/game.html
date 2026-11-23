@@ -201,6 +201,9 @@ html.lobby .unlock-toast{display:none}
   <header><h2 id="update-title">更新日誌</h2><form method="dialog"><button type="submit">關閉</button></form></header>
   <div id="update-entries"></div>
 </dialog>
+<script src="/games/nezha/battle-rules.js"></script>
+<script src="/games/nezha/battle-combat.js"></script>
+<script src="/games/nezha/enemy-art.js"></script>
 <script src="/games/nezha/social.js"></script>
 <script>
 const canvas = document.querySelector('#arena');
@@ -242,20 +245,16 @@ heroSheet.addEventListener('error',()=>{
 });
 jigongSheet.addEventListener('error',()=>{jigongSheetFailed=true;refreshLobbyPlay();});
 const keys = new Set();
-const rounds = 480;
-const lateStoryXPStart = 300;
-const lateStoryXPFullAt = 450;
-const storyFinalMonsterXP = 20;
+const rounds = NezhaRules.storyDuration;
 const bossXPNoticeTime = 1.2;
 const contactHitInterval = 0.5;
 const rewardInterval = 6;
 const mapWidth = 2880;
 const mapHeight = 2160;
-const wheelOrbitRadius = 96;
-const wheelHitRadius = 23;
-const wheelEvolutionScale = Math.SQRT2;
-const wheelKnockbackCooldown = .5;
-const maxWheels = 8;
+const {wheelOrbitRadius,wheelHitRadius,wheelEvolutionScale,wheelKnockbackCooldown,
+  bossStages,normalSkillLimit,baseStats,miniTypes,rangedAttacks,patterns,jigongSpecs,skillNames,
+  ringCooldown,ringExplosionLife,brickCooldown,wheelCooldown,jigongWindRadius,
+  maxMoveSpeed,attackGainPerLevel,defenseGainPerLevel,milestoneLevels}=NezhaRules;
 const tileWidth = 48;
 const pickupRadius = 2 * tileWidth;
 const bombKillLimit = 20;
@@ -263,72 +262,18 @@ const bombFlashTime = .4;
 const magnetFlightTime = .9;
 const magnetPulseTime = .55;
 const maxMagnetFlights = 180;
-const bossStages = [
-  {at:120,name:'超級大幽靈',xp:500,hp:210,attack:22,speed:70,r:35,color:'#e9d8ff',interval:3.5},
-  {at:300,name:'重甲幽靈',xp:500,hp:465,attack:32,speed:59,r:42,color:'#b8b0ee',interval:2.8},
-  {at:480,name:'超級龍王',xp:1000,hp:870,attack:42,speed:87,r:49,color:'#61d9a5',interval:2.7}
-];
-const maxMoveSpeed=100;
-const maxHealth=1000;
-const maxUpgradeLevel=25;
-const attackGainPerLevel=2;
-const defenseGainPerLevel=1;
-const milestoneLevels=10;
-const milestoneStatFactor=1.05;
-const enemyReferenceStatGain=.5;
-const swordAttackGain=4;
-const armorDefenseGain=9;
-const normalSkillLimit=2;
 const skillTomeChance=.005;
-const favoriteRouteFactor=1.30;
-const baseQi={cooldown:1.05,targets:1};
-const qiAttackGain=3;
-const qiRange=360;
-const qiSpeed=680;
-const qiMinCooldown=.35;
-const qiMaxTargets=5;
-const towerBaselineFloor=4;
-const towerFloorGrowth=1.15;
-const towerHealthBoost=1.35;
-const towerDamageBoost=1.12;
-const towerLevelXPBoost=1.15;
-const towerMaxLevelCost=1800;
-const baseStats={hp:100,attack:25,defense:25,speed:45};
+const {towerBaselineFloor,towerFloorGrowth,towerHealthBoost,towerDamageBoost,towerGuardians,towerGoal,storyWaves}=NezhaRules;
 const storyMobLimit=80;
 const waveWarningTime=4;
-const storyWaves=[
-  {at:80,duration:25,count:60,name:'幽靈來襲',kinds:['shade','shade','shade','runner','shade']},
-  {at:210,duration:25,count:85,name:'疾風夾擊',kinds:['runner','runner','shade','runner','runner'],split:true},
-  {at:375,duration:30,count:110,name:'重甲壓陣',kinds:['guard','guard','shade','guard','guard','caster','guard','shade','guard','shade']}
-];
-const miniTypes=[
-  {name:'赤焰幽靈',color:'#fb8577',hp:75,attack:12,speed:107,r:24},
-  {name:'鐵甲幽靈',color:'#9ca9ea',hp:125,attack:17,speed:68,r:28},
-  {name:'疾風幽靈',color:'#92ded0',hp:65,attack:10,speed:131,r:21}
-];
-const mobKinds={
-  shade:{hp:1,attack:1,speed:1,radius:13},
-  runner:{hp:.64,attack:.7,speed:1.38,radius:11},
-  guard:{hp:1.7,attack:1,speed:.72,radius:16},
-  healer:{hp:.85,attack:.58,speed:.8,radius:13},
-  caster:{hp:.95,attack:.74,speed:.82,radius:13}
-};
-const rangedAttacks={
-  shade:{range:255,windup:.8,recovery:4.9,speed:180,radius:5,power:.60},
-  runner:{range:220,windup:.62,recovery:4.5,speed:230,radius:4,power:.55},
-  guard:{range:280,windup:1,recovery:5.6,speed:158,radius:8,power:.72},
-  healer:{range:255,windup:.85,recovery:6.2,speed:177,radius:5,power:.58},
-  caster:{range:280,windup:1.15,recovery:6,radius:30,power:.85,seal:true},
-  mini:{range:320,windup:.88,recovery:3.7,speed:222,radius:8,power:.78}
-};
 const projectilePlayerRadius=12;
-const towerGoal=1000;
 const towerStartLevel=50,towerStartUpgrades=50,towerStartRewards=25;
 let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline;
 let optionButtons=[];
 const miniBossChance=.30;
 let nextWave, waveSlots, miniBossKills, miniBossThreshold, gearRewards, nextRewardAt;
-let boss, nextBoss, elapsed, targetedBolts, shots, bricks, warnings, drops, ingots, wheelTrail, trailTimer;
+const skillCombat=NezhaCombat.create();
+let boss, nextBoss, elapsed, warnings, drops, wheelTrail, trailTimer;
 let enemyShots, nextEnemyAimAt;
 let magnetEffect;
 const camera={x:0,y:0};
@@ -375,18 +320,12 @@ function trackCamera(){
   centerCamera(camera,width,height);
 }
 function reset(){
-  player = {character:profile.character,x:mapWidth/2,y:mapHeight/2,hp:baseStats.hp,maxHp:baseStats.hp,defense:baseStats.defense,attack:baseStats.attack,speed:baseStats.speed,
-    qi:{...baseQi,rank:1,timer:0},
-    xp:0,level:1,rings:0,ringDamage:baseStats.attack,pattern:0,wheels:0,wheelDamage:15,
-    wheelSpeed:2.5,wheelAngle:0,wheelTimer:0,bricks:0,ringTimer:0,brickTimer:5,brickDamage:42,
-    skillLevels:[0,0,0], skillRoutes:[null,null,null], skillTome:false, evolved:[false,false,false], gear:[0,0,0,0],
-    deathCause:null,
-    moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1,attackAt:-1,
-    jigong:jigongSpecs.map(spec=>({count:spec.count,damageUpgrades:0,cooldown:spec.cooldown,timer:0,castAt:null}))};
-  mobs=[]; stars=[]; sparks=[]; targetedBolts=[]; shots=[]; bricks=[]; warnings=[]; drops=[]; ingots=[]; wheelTrail=[]; trailTimer=0;
+  player={...NezhaRules.createCharacter(profile.character),x:mapWidth/2,y:mapHeight/2,deathCause:null,
+    moving:false,heading:0,facing:-1,attackFacing:-1,attackUntil:-1,attackAt:-1};
+  mobs=[]; stars=[]; sparks=[]; warnings=[]; drops=[]; wheelTrail=[]; trailTimer=0;skillCombat.reset();
   enemyShots=[];nextEnemyAimAt=0;
   magnetEffect=null;
-  jigongShots=[];jigongWindCasts=[];unlockToastUntil=0;
+  unlockToastUntil=0;
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
   towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
   towerBaseline=null;
@@ -574,46 +513,9 @@ function wheelPoints(){
     return {x:player.x+Math.cos(angle)*wheelOrbitRadius,y:player.y+Math.sin(angle)*wheelOrbitRadius};
   });
 }
-function wheelSweepsEnemy(enemy,start,sweep,hitRadius){
-  const dx=enemy.x-player.x,dy=enemy.y-player.y;
-  const gap=Math.hypot(dx,dy),reach=enemy.r+hitRadius;
-  if(Math.abs(gap-wheelOrbitRadius)>=reach)return false;
-  // Even spacing reduces all the wheel arcs to one repeating sector.
-  const spacing=2*Math.PI/player.wheels;
-  const relative=(Math.atan2(dy,dx)-start)%spacing;
-  const offset=relative<0?relative+spacing:relative;
-  if(offset<=sweep)return true;
-  const angleGap=Math.min(offset-sweep,spacing-offset);
-  return gap*gap+wheelOrbitRadius*wheelOrbitRadius-2*gap*wheelOrbitRadius*Math.cos(angleGap)<reach*reach;
-}
 const challengeTime=()=>time+towerTime;
-function skillAttackGrowth(){
-  if(player.character==='jigong')return Math.max(1,...player.jigong.map((skill,index)=>player.skillLevels[index]?jigongBalancePower(index,skill)/jigongSpecs[index].balancePower:1));
-  let skillGrowth=1;
-  if(player.rings)skillGrowth=Math.max(skillGrowth,player.ringDamage/baseStats.attack*(player.evolved[0]?1.5:1));
-  if(player.wheels)skillGrowth=Math.max(skillGrowth,player.wheelDamage/15);
-  if(player.bricks)skillGrowth=Math.max(skillGrowth,player.brickDamage/42);
-  return skillGrowth;
-}
 function currentEnemyBalance(){
-  // Keep the existing enemy curve independent of the new player-only stat gains.
-  const levelGrowth=(player.level-1)*enemyReferenceStatGain;
-  const referenceAttack=baseStats.attack+levelGrowth+player.gear[3]*swordAttackGain;
-  const referenceDefense=baseStats.defense+levelGrowth+player.gear[1]*armorDefenseGain;
-  const durability=(player.maxHp/baseStats.hp)*(100+referenceDefense)/(100+baseStats.defense);
-  const ringVolley=player.rings*player.ringDamage*(player.evolved[0]?1.5:1);
-  const wheelSweep=player.wheels*player.wheelDamage;
-  const brickVolley=player.bricks*player.brickDamage;
-  const jigongVolley=player.character==='jigong'
-    ?player.jigong.reduce((total,skill,index)=>total+(player.skillLevels[index]?Math.min(3,skill.count)*jigongBalancePower(index,skill):0),0):0;
-  return {
-    time:challengeTime(),
-    attackGrowth:referenceAttack/baseStats.attack*skillAttackGrowth(),
-    durability:Math.pow(durability,.65),
-    level:Math.min(player.level,50),
-    burst:(ringVolley+wheelSweep+brickVolley+jigongVolley)*referenceAttack/baseStats.attack,
-    miniAttackScaling:miniBossThreshold>50
-  };
+  return NezhaRules.enemyBalance(player,challengeTime(),miniBossThreshold>50);
 }
 const enemyBalance=()=>towerBaseline??currentEnemyBalance();
 const baseTowerFloor=()=>Math.min(towerFloor,towerBaselineFloor);
@@ -622,35 +524,19 @@ const enemyHealthStrength=()=>towerStrength()*(towerFloor?towerHealthBoost:1);
 function scaledEnemyAttack(attack,balance){
   return attack*balance.durability*towerStrength()*(towerFloor?towerDamageBoost:1);
 }
-function levelHealthGrowth(rate,balance){
-  return 1+rate*(balance.level-1)**1.2;
-}
 function scaledBossHealth(hp,balance){
-  const base=Math.max(hp*1.2*balance.attackGrowth**.65,balance.burst*(4+Math.log2(1+baseTowerFloor())*.4));
-  return Math.round(base*levelHealthGrowth(.023,balance)*enemyHealthStrength());
+  return NezhaRules.bossHealth(hp,balance,baseTowerFloor(),enemyHealthStrength());
 }
 function chooseMobKind(){
   const phase=towerFloor>0?480:time;
-  const roll=Math.random();
-  if(phase>=280&&roll<.05)return 'caster';
-  if(phase>=165&&roll<.11)return 'healer';
-  if(phase>=85&&roll<.23)return 'guard';
-  if(phase>=45&&roll<.40)return 'runner';
-  return 'shade';
+  return NezhaRules.enemyKind(phase,Math.random());
 }
 function addMob(wave=false,kind=chooseMobKind(),angle=Math.random()*Math.PI*2){
   const balance=enemyBalance();
-  const traits=mobKinds[kind];
-  const time=balance.time;
   const radius=clamp(Math.min(width,height)*.6+85,270,470)+Math.random()*(wave?220:80);
-  const midgame=Math.max(0,time-120);
-  const endgame=Math.max(0,time-300);
-  const hp=Math.round((23+time*.112+midgame*.025+endgame*.055)*(wave?.73:1)*
-    balance.attackGrowth**(wave?.35:.65)*levelHealthGrowth(wave?.030:.042,balance)*enemyHealthStrength()*traits.hp);
   mobs.push({x:clamp(player.x+Math.cos(angle)*radius,15,mapWidth-15),
     y:clamp(player.y+Math.sin(angle)*radius,15,mapHeight-15),
-    hp,maxHp:hp,attack:scaledEnemyAttack((8+time*.037+midgame*.008+endgame*.014)*(wave?.48:1)*traits.attack,balance),
-    speed:(67+time*.10+endgame*.04)*traits.speed,r:traits.radius,kind,
+    ...NezhaRules.mobStats(kind,balance,wave,enemyHealthStrength(),scaledEnemyAttack(1,balance)),
     flash:0,stun:0,phase:Math.random()*6,abilityAt:elapsed+2+Math.random()*3,
     rangedReadyAt:elapsed+1.4+Math.random()*2.2});
 }
@@ -689,28 +575,15 @@ function updateSpawns(dt){
 }
 function addMiniBoss(){
   const balance=enemyBalance();
-  const time=balance.time;
   const type=miniTypes[Math.floor(Math.random()*miniTypes.length)];
   const angle=Math.random()*2*Math.PI;
-  const growth=balance.miniAttackScaling?balance.attackGrowth**.75:1;
-  const hp=Math.round((type.hp+time*.24)*1.15*levelHealthGrowth(.034,balance)*growth*enemyHealthStrength());
-  mobs.push({...type,mini:true,hp,maxHp:hp,attack:scaledEnemyAttack(type.attack+time*.022,balance),
+  mobs.push({...NezhaRules.miniStats(type,balance,enemyHealthStrength(),scaledEnemyAttack(1,balance)),
     x:clamp(player.x+Math.cos(angle)*185,25,mapWidth-25),
     y:clamp(player.y+Math.sin(angle)*185,25,mapHeight-25),
     flash:0,stun:0,phase:Math.random()*6,rangedReadyAt:elapsed+1+Math.random()*1.2});
 }
-function regularLevelXP(targetLevel){
-  if(targetLevel<=20)return 5+10*(targetLevel-2);
-  if(targetLevel<=40)return 195+13*(targetLevel-21);
-  if(targetLevel>=50)return 599;
-  return Math.round(599+(targetLevel-50)*(158/9));
-}
 function levelCost(targetLevel){
-  const base=targetLevel===21?795:targetLevel===41?2855:regularLevelXP(targetLevel);
-  if(!towerFloor)return base;
-  if(targetLevel>=50)return towerMaxLevelCost;
-  const progress=Math.max(0,targetLevel-41)/9;
-  return Math.round(base*towerLevelXPBoost+(towerMaxLevelCost-599*towerLevelXPBoost)*progress);
+  return NezhaRules.levelCost(targetLevel,Boolean(towerFloor));
 }
 const needed=()=>levelCost(player.level+1);
 function availableLevels(){
@@ -722,140 +595,25 @@ function availableLevels(){
   }
   return level-player.level+Math.floor(remaining/levelCost(50));
 }
-function timeBasedEnemyXP(seconds){
-  const minutes=Math.floor(seconds/60);
-  return 1+minutes+Math.floor(minutes/3);
-}
 function enemyXP(enemy){
-  const seconds=towerBaseline?.time??challengeTime();
-  let base=timeBasedEnemyXP(seconds);
-  if(towerFloor){
-    // Carry the story bonus into the tower without changing its time or floor growth.
-    base+=storyFinalMonsterXP-timeBasedEnemyXP(rounds)+baseTowerFloor()*2;
-  }else if(seconds>=lateStoryXPStart){
-    const progress=clamp((seconds-lateStoryXPStart)/(lateStoryXPFullAt-lateStoryXPStart),0,1);
-    const startingXP=timeBasedEnemyXP(lateStoryXPStart);
-    base=Math.max(base,startingXP+Math.floor((storyFinalMonsterXP-startingXP)*progress));
-  }
-  return base*(enemy.mini?3:1);
+  return NezhaRules.enemyXP(towerBaseline?.time??challengeTime(),towerFloor,enemy.mini);
 }
-const skillNames=['乾坤圈','超級風火輪','超級金磚'];
-const evolvedNames=['三昧真火','火焰風火輪','無敵元寶'];
-const jigongEvolvedNames=['八方神行鞋','甘露乾坤葫','伏魔回風扇'];
-const gearNames=['大魂丹','神甲','神馬','神刀'];
-const evolutionGear=[3,2,1];
-const jigongEvolutionGear=[2,0,3];
-const activeEvolutionGear=()=>player.character==='jigong'?jigongEvolutionGear:evolutionGear;
-const patterns=['集中','扇形','八方'];
-const ringCooldown=.78;
-const ringExplosionChance=.30;
-const ringExplosionDamage=.45;
-const ringExplosionLife=.4;
-const brickCooldown=5;
-const wheelCooldown=.28;
-const ingotRange=230;
-const ingotShotInterval=1;
-const ingotShotDamage=.45;
-const ingotShotSpeed=560;
-function applyEvolutions(){
-  const gear=activeEvolutionGear();
-  player.evolved=player.skillLevels.map((level,index)=>level>=10&&player.gear[gear[index]]>0);
-}
-const skillUnlocks=[
-  ['乾坤圈・選擇發射型態',pattern=>{player.rings=1;player.pattern=pattern;}],
-  ['超級風火輪・繞身旋轉',()=>{player.wheels=1;}],
-  ['超級金磚・範圍攻擊與暈眩',()=>{player.bricks=1;}]
-];
-const skillUpgradeRoutes=[
-  [
-    {key:'count',label:'發射數量＋1',available:()=>player.rings<8,apply:()=>player.rings++},
-    {key:'damage',label:'傷害＋7',apply:()=>player.ringDamage+=7}
-  ],
-  [
-    {key:'count',label:'數量＋1',available:()=>player.wheels<maxWheels,apply:()=>player.wheels++},
-    {key:'damage',label:'傷害＋6',apply:()=>player.wheelDamage+=6},
-    {key:'speed',label:'旋轉速度＋20%',apply:()=>player.wheelSpeed*=1.2}
-  ],
-  [
-    {key:'count',label:'投擲數量＋1',available:()=>player.bricks<5,apply:()=>player.bricks++},
-    {key:'damage',label:'傷害＋8',apply:()=>player.brickDamage+=8}
-  ]
-];
-const jigongSpecs=[
-  {name:'開道鞋',label:'開道鞋・八方貫穿',count:8,step:2,max:20,power:22,gain:6,balancePower:14,balanceGain:4,cooldown:3.2,min:1.15,speed:390,life:1.15,r:16},
-  {name:'葫蘆寶',label:'葫蘆寶・環射水花',count:4,step:4,max:16,power:24,gain:7,balancePower:18,balanceGain:5,cooldown:4,min:1.35,speed:345,life:1.10,r:11},
-  {name:'清新扇',label:'清新扇・迴旋龍捲風',count:3,step:2,max:25,power:21,gain:6,balancePower:15,balanceGain:4,cooldown:5.2,min:1.65,speed:205,life:1.55,r:13}
-];
-// Use the pre-buff damage curve for enemy scaling, not the damage dealt in combat.
-function jigongBalancePower(index,skill){
-  const spec=jigongSpecs[index];
-  return spec.balancePower+skill.damageUpgrades*spec.balanceGain;
-}
-const jigongUnlocks=jigongSpecs.map(spec=>[spec.label,()=>{}]);
-const jigongNames=jigongSpecs.map(spec=>spec.name);
-const jigongRoutes=jigongSpecs.map((spec,index)=>{
-  const state=()=>player.jigong[index];
-  return [
-    {key:'damage',label:'傷害＋'+spec.gain,apply:()=>state().damageUpgrades++},
-    {key:'count',label:(index===1?'發射方位':'數量')+'＋'+spec.step,available:()=>state().count<spec.max,apply:()=>state().count=Math.min(spec.max,state().count+spec.step)},
-    {key:'cooldown',label:'冷卻時間－10%',available:()=>state().cooldown>spec.min,apply:()=>state().cooldown=Math.max(spec.min,Math.round(state().cooldown*.9*100)/100)}
-  ];
-});
-const activeSkillNames=()=>player.character==='jigong'?jigongNames:skillNames;
-const activeSkillName=index=>player.evolved[index]?(player.character==='jigong'?jigongEvolvedNames:evolvedNames)[index]:activeSkillNames()[index];
-const activeSkillUnlocks=()=>player.character==='jigong'?jigongUnlocks:skillUnlocks;
-const activeSkillRoutes=()=>player.character==='jigong'?jigongRoutes:skillUpgradeRoutes;
-const jigongReturnPower=.4;
-const jigongSlowTime=1.2,jigongSlowInterval=2;
-const jigongWaterTime=10,jigongWaterInterval=1,jigongWaterDamage=.03;
-const jigongWindRadius=42,jigongWindRingRadius=124,jigongWindEyes=10,jigongWindTime=6;
-const jigongWindInterval=.5,jigongWindPower=.60,jigongWindPullSpeed=180;
-let jigongShots=[],jigongWindCasts=[];
+const activeSkillNames=()=>NezhaRules.activeSkills(player);
+const activeSkillName=index=>NezhaRules.activeName(player,index);
 const learnedSkillCount=()=>player.skillLevels.filter(Boolean).length;
-const skillSlotLimit=()=>player.skillTome?skillNames.length:normalSkillLimit;
-const hasFreeSkillSlot=()=>learnedSkillCount()<skillSlotLimit();
 function chooseSkill(index,resume=()=>setMode('play')){
-  if(player.skillLevels[index]||!hasFreeSkillSlot())return;
+  if(player.skillLevels[index]||!NezhaRules.hasSlot(player))return;
   function chooseRoute(pattern){
-    panel(activeSkillNames()[index]+'強化路線','選定的強化選項，出現機率提高 30%。',activeSkillRoutes()[index].map(({key,label})=>[label,()=>{
-      activeSkillUnlocks()[index][1](pattern);
-      player.skillLevels[index]=1;
-      player.skillRoutes[index]=key;
-      resume();
+    panel(activeSkillNames()[index]+'強化路線','選定的強化選項，出現機率提高 30%。',NezhaRules.skillRoutes(player,index).map(({key,label})=>[label,()=>{
+      if(NezhaRules.learnSkill(player,index,pattern,key))resume();
     }]));
   }
   if(index===0&&player.character!=='jigong'){
     panel('選擇乾坤圈型態','選定後，本局會沿用這個發射型態。',patterns.map((name,i)=>[name,()=>chooseRoute(i)]));
-  }else chooseRoute();
-}
-function rollUpgradeOption(choices){
-  const favorite=choices.find(choice=>choice[2]);
-  if(choices.length===1)return choices[0];
-  if(!favorite)return choices[Math.floor(Math.random()*choices.length)];
-  if(Math.random()<favoriteRouteFactor/choices.length)return favorite;
-  const alternatives=choices.filter(choice=>choice!==favorite);
-  return alternatives[Math.floor(Math.random()*alternatives.length)];
+  }else chooseRoute(0);
 }
 function gearUpgradeChoices(resume=()=>setMode('play')){
-  const options=[];
-  function add(index,label,apply){
-    const level=player.gear[index];
-    if(apply)options.push([gearNames[index]+' Lv.'+(level+1)+'・'+label,()=>{
-      player.gear[index]++;
-      apply();
-    }]);
-    else options.push([gearNames[index]+'・'+label,null]);
-  }
-  add(3,'攻擊力＋'+swordAttackGain,()=>player.attack+=swordAttackGain);
-  const speedGain=Math.min(4,maxMoveSpeed-player.speed);
-  add(2,speedGain>0?'移動速度＋'+speedGain:'移速已達 '+maxMoveSpeed,speedGain>0?()=>player.speed+=speedGain:null);
-  add(1,'防禦力＋'+armorDefenseGain,()=>player.defense+=armorDefenseGain);
-  const healthGain=Math.min(28+4*player.gear[0],maxHealth-player.maxHp);
-  add(0,healthGain>0?'最大與目前血量＋'+healthGain:'回復 60% 最大血量',healthGain>0?()=>{
-    player.maxHp+=healthGain;
-    player.hp=Math.min(player.maxHp,player.hp+healthGain);
-  }:()=>heal(.6));
-  return options.map(([label,apply])=>[label,apply?()=>{apply();applyEvolutions();resume();}:null]);
+  return NezhaRules.gearChoices(player).map(({label,apply})=>[label,apply?()=>{apply();resume();}:null]);
 }
 function continueAfterGearRewards(resume=()=>setMode('play'),towerSetup=false){
   if(!showGearReward(resume,towerSetup))resume();
@@ -871,47 +629,9 @@ function showGearReward(resume=()=>setMode('play'),towerSetup=false){
   return true;
 }
 function showUpgrades(resume=()=>setMode('play'),setupChoice=0){
-  const options=gearUpgradeChoices(resume);
-  const openSlot=hasFreeSkillSlot();
-  const requirements=activeEvolutionGear();
-  activeSkillUnlocks().forEach(([label],index)=>{
-    const level=player.skillLevels[index];
-    if(!level){
-      if(openSlot)options.push([label,()=>chooseSkill(index,resume)]);
-      return;
-    }
-    const name=activeSkillName(index);
-    if(level>=maxUpgradeLevel){
-      options.push([name+'・已達上限',null]);
-      return;
-    }
-    const showRequirement=level===9||(player.character==='jigong'&&level>9);
-    const requirement=showRequirement&&!player.evolved[index]&&!player.gear[requirements[index]]?'・進化需'+gearNames[requirements[index]]:'';
-    const routes=[];
-    activeSkillRoutes()[index].forEach(route=>{
-      if(route.available&&!route.available())return;
-      routes.push([name+' Lv.'+(level+1)+'・'+route.label+requirement,()=>{
-        route.apply();player.skillLevels[index]++;applyEvolutions();resume();
-      },route.key===player.skillRoutes[index]]);
-    });
-    options.push(rollUpgradeOption(routes));
-  });
-  const qi=player.qi;
-  if(qi.rank<maxUpgradeLevel){
-    const qiOptions=[];
-    function upgradeQi(label,apply){
-      qiOptions.push(['基礎氣功強化 '+(qi.rank+1)+'・'+label,()=>{
-        apply();qi.rank++;resume();
-      }]);
-    }
-    if(qi.cooldown>qiMinCooldown){
-      const nextCooldown=Math.max(qiMinCooldown,Math.round(qi.cooldown*.9*100)/100);
-      upgradeQi('攻速提升・間隔 '+nextCooldown.toFixed(2)+' 秒',()=>{qi.cooldown=nextCooldown;});
-    }
-    if(qi.targets<qiMaxTargets)upgradeQi('目標數＋1',()=>qi.targets++);
-    upgradeQi('人物攻擊力＋'+qiAttackGain,()=>player.attack+=qiAttackGain);
-    options.push(rollUpgradeOption(qiOptions));
-  }else options.push(['基礎氣功・已達上限',null]);
+  const options=NezhaRules.levelChoices(player).map(({label,apply,learn})=>[
+    label,learn!==undefined?()=>chooseSkill(learn,resume):apply?()=>{apply();resume();}:null
+  ]);
   setMode('upgrade');
   const milestone=player.level%milestoneLevels===0?'總攻擊力與總防禦力再＋5%。':'';
   const title=setupChoice?'塔起點・升級配點 '+setupChoice+' / '+towerStartUpgrades:'升到 '+player.level+' 級';
@@ -919,15 +639,7 @@ function showUpgrades(resume=()=>setMode('play'),setupChoice=0){
   const actions=panel(title,detail,options);
   actions.classList.add('level-up-actions');
 }
-function gainLevel(){
-  player.level++;
-  player.attack+=attackGainPerLevel;
-  player.defense+=defenseGainPerLevel;
-  if(player.level%milestoneLevels===0){
-    player.attack*=milestoneStatFactor;
-    player.defense*=milestoneStatFactor;
-  }
-}
+function gainLevel(){NezhaRules.gainLevel(player);}
 function advanceLevel(){
   const requiredXP=needed();
   if(player.xp<requiredXP)return false;
@@ -1402,19 +1114,13 @@ function startBoss(){
   boss={...stage,x:player.x+direction*145,y:player.y,hp,maxHp:hp,attack:scaledEnemyAttack(stage.attack,balance),
     stun:0,flash:0,cast:2,startedAt:elapsed};
 }
-const towerGuardians=[
-  {name:'獄火龍王',color:'#ff8665',speed:95,spread:3,interval:2.65},
-  {name:'雷鳴龍王',color:'#b4a5ff',speed:114,spread:4,interval:2.5},
-  {name:'玄冰龍王',color:'#80dbe7',speed:83,spread:5,interval:2.85}
-];
 function enterFloor(){
   towerFloor++;floorKills=0;floorTime=0;spawn=.65;
   // Share one stat baseline so the 15% multiplier is the only growth from floor 5.
   if(towerFloor===towerBaselineFloor)towerBaseline=currentEnemyBalance();
-  boss=null;mobs=[];stars=[];drops=[];targetedBolts=[];shots=[];bricks=[];warnings=[];ingots=[];sparks=[];wheelTrail=[];
+  boss=null;mobs=[];stars=[];drops=[];warnings=[];sparks=[];wheelTrail=[];skillCombat.reset();
   enemyShots=[];nextEnemyAimAt=elapsed;
   magnetEffect=null;
-  jigongShots=[];jigongWindCasts=[];
   for(const skill of player.jigong)skill.castAt=null;
   player.x=mapWidth/2;player.y=mapHeight/2;
   heal(.25);
@@ -1448,7 +1154,7 @@ function spawnTowerGuardian(){
   const hp=scaledBossHealth(1100+floor*340+guardianTime*1.25,balance);
   boss={...guardian,name:'第 '+towerFloor+' 層・'+guardian.name,hp,maxHp:hp,
     attack:scaledEnemyAttack(43+floor*7+guardianTime*.04,balance),speed:guardian.speed+floor*2,
-    r:49,x:player.x+direction*145,y:player.y,stun:0,flash:0,cast:2,startedAt:elapsed};
+    r:49,x:player.x+direction*145,y:player.y,stun:0,flash:0,cast:2,patternIndex:0,startedAt:elapsed};
 }
 function bossPressure(){
   return clamp((elapsed-boss.startedAt-25)/50,0,1);
@@ -1456,239 +1162,10 @@ function bossPressure(){
 function enemyAttack(enemy){
   return enemy===boss?enemy.attack*(1+.20*bossPressure()):enemy.attack;
 }
-function nearestTargets(enemies){
-  return enemies.filter(enemy=>enemy.hp>0&&distance(enemy,player)<490)
-    .sort((a,b)=>distance(a,player)-distance(b,player));
-}
-function applyHit(enemy,amount){
-  enemy.hp-=amount; enemy.flash=.15;
-  sparks.push({x:enemy.x,y:enemy.y,life:.22,r:8});
-}
-function damage(enemy,value){
-  applyHit(enemy,Math.round(value*player.attack/baseStats.attack));
-}
 function hurt(value,source){
   if(player.hp<=0)return;
-  player.hp=Math.max(0,player.hp-Math.max(1,Math.round(value*100/(100+player.defense))));
+  player.hp=Math.max(0,player.hp-NezhaRules.hitValue(value,player.defense));
   if(player.hp===0)player.deathCause=source;
-}
-function poseForAttack(target){
-  if(player.character==='jigong'&&elapsed<player.attackUntil)return;
-  const dx=target.x-player.x;
-  player.attackFacing=Math.abs(dx)>2?Math.sign(dx):player.facing;
-  player.attackAt=elapsed;
-  player.attackUntil=elapsed+(player.character==='jigong'?.315:.23);
-}
-function launchTargetedBolt(origin,target,speed,basePower=null){
-  const angle=Math.atan2(target.y-origin.y,target.x-origin.x);
-  targetedBolts.push({x:origin.x,y:origin.y,angle,target,speed,basePower,life:1});
-}
-function explodeRingHit(center,value,enemies){
-  const radius=center.r*5;
-  for(const enemy of enemies){
-    if(enemy!==center&&enemy.hp>0&&distance(center,enemy)<=radius)damage(enemy,value*ringExplosionDamage);
-  }
-  sparks.push({x:center.x,y:center.y,r:radius,life:ringExplosionLife,kind:'ring-burst'});
-}
-function launchJigongVolley(index,skill){
-  const spec=jigongSpecs[index],hits=new Map();
-  const power=spec.power+skill.damageUpgrades*spec.gain;
-  const evolved=player.evolved[index];
-  const returnHits=index===0&&evolved?new Set():null;
-  if(index===2&&evolved){
-    const eyes=Array.from({length:jigongWindEyes},(_,i)=>{
-      const angle=i*2*Math.PI/jigongWindEyes;
-      return {x:player.x+Math.cos(angle)*jigongWindRingRadius,y:player.y+Math.sin(angle)*jigongWindRingRadius};
-    });
-    jigongWindCasts.push({eyes,power:spec.power*jigongWindPower,startedAt:elapsed,endsAt:elapsed+jigongWindTime,nextPulse:elapsed+jigongWindInterval});
-  }
-  for(let i=0;i<skill.count;i++){
-    const angle=index===0?(i%8)*Math.PI/4+(i>=16?-Math.PI/16:i>=8?Math.PI/16:0):i*2*Math.PI/skill.count;
-    const x=player.x+Math.cos(angle)*18,y=player.y+Math.sin(angle)*18;
-    jigongShots.push({index,x,y,originX:player.x,originY:player.y,angle,phase:angle,age:0,life:spec.life,speed:spec.speed,r:spec.r,power,
-      seen:new Set(),hits,evolved,returnHits,returning:false});
-  }
-}
-function jigongSlowFactor(enemy){
-  if(elapsed>=(enemy.jigongSlowUntil??0))return 1;
-  return enemy===boss||enemy.mini ? .90 : .80;
-}
-function hitJigongSegment(shot,oldX,oldY,enemies){
-  const dx=shot.x-oldX,dy=shot.y-oldY,travel=dx*dx+dy*dy;
-  const left=Math.min(oldX,shot.x),right=Math.max(oldX,shot.x),top=Math.min(oldY,shot.y),bottom=Math.max(oldY,shot.y);
-  const seen=shot.returning?shot.returnHits:shot.seen;
-  for(const enemy of enemies){
-    const r=enemy.r+shot.r;
-    if(enemy.hp<=0||enemy.x<left-r||enemy.x>right+r||enemy.y<top-r||enemy.y>bottom+r||seen.has(enemy))continue;
-    const px=enemy.x-oldX,py=enemy.y-oldY;
-    const t=travel?clamp((px*dx+py*dy)/travel,0,1):0;
-    if((px-dx*t)**2+(py-dy*t)**2>r*r)continue;
-    seen.add(enemy);
-    if(shot.returning){damage(enemy,shot.power*jigongReturnPower);continue;}
-    const overlap=shot.hits.get(enemy)??0;
-    // Piercing keeps hitting new targets; overlapping rays are weaker on the same target.
-    if(overlap>=3)continue;
-    shot.hits.set(enemy,overlap+1);damage(enemy,shot.power*(overlap?.35:1));
-    if(shot.index===1&&shot.evolved&&enemy.hp>0){
-      if(elapsed>=(enemy.jigongSlowReadyAt??0)){
-        enemy.jigongSlowUntil=elapsed+jigongSlowTime;
-        enemy.jigongSlowReadyAt=elapsed+jigongSlowInterval;
-      }
-      enemy.jigongWaterUntil=elapsed+jigongWaterTime;
-      enemy.jigongWaterNextTick??=elapsed+jigongWaterInterval;
-    }
-  }
-}
-function advanceJigongShot(shot,dt,enemies){
-  const remaining=shot.life-shot.age,step=Math.min(dt,remaining),finished=dt>=remaining;
-  const oldX=shot.x,oldY=shot.y;
-  shot.age=finished?shot.life:shot.age+step;
-  if(shot.index===2){
-    shot.angle=shot.phase+shot.age*3.25;
-    const radius=18+shot.age*shot.speed;
-    shot.x=shot.originX+Math.cos(shot.angle)*radius;shot.y=shot.originY+Math.sin(shot.angle)*radius;
-  }else if(shot.returning&&finished){
-    shot.x=shot.originX;shot.y=shot.originY;
-  }else{
-    shot.x+=Math.cos(shot.angle)*shot.speed*step;shot.y+=Math.sin(shot.angle)*shot.speed*step;
-  }
-  hitJigongSegment(shot,oldX,oldY,enemies);
-  if(!finished)return true;
-  if(shot.returnHits&&!shot.returning){
-    shot.returning=true;shot.angle=shot.phase+Math.PI;
-    shot.life=(18+shot.speed*shot.age)/shot.speed;shot.age=0;
-    return dt>step?advanceJigongShot(shot,dt-step,enemies):true;
-  }
-  return false;
-}
-function tickJigongWater(enemy){
-  while(enemy.hp>0&&enemy.jigongWaterNextTick<=enemy.jigongWaterUntil+1e-9&&elapsed+1e-9>=enemy.jigongWaterNextTick){
-    applyHit(enemy,enemy.maxHp*jigongWaterDamage);
-    enemy.jigongWaterNextTick+=jigongWaterInterval;
-  }
-  if(elapsed>=enemy.jigongWaterUntil)enemy.jigongWaterNextTick=undefined;
-}
-function advanceJigongWind(dt,enemies){
-  for(const cast of jigongWindCasts){
-    cast.pulseAt=cast.nextPulse<=cast.endsAt+1e-9&&elapsed+1e-9>=cast.nextPulse?cast.nextPulse:Infinity;
-    if(cast.pulseAt!==Infinity)cast.nextPulse+=jigongWindInterval;
-  }
-  for(const enemy of enemies){
-    if(enemy.hp<=0)continue;
-    const range=(jigongWindRadius+enemy.r)**2;
-    let nearest=null,nearestSq=range,pulseAt=Infinity,power=0;
-    for(const cast of jigongWindCasts){
-      const pulling=elapsed<cast.endsAt;
-      const pulsing=cast.pulseAt<pulseAt&&cast.pulseAt+1e-9>=(enemy.jigongWindReadyAt??0);
-      if(!pulling&&!pulsing)continue;
-      for(const eye of cast.eyes){
-        const gap=(eye.x-enemy.x)**2+(eye.y-enemy.y)**2;
-        if(gap>range)continue;
-        if(pulling&&gap<nearestSq){nearest=eye;nearestSq=gap;}
-        if(pulsing){pulseAt=cast.pulseAt;power=cast.power;}
-      }
-    }
-    // Overlapping eyes and overlapping casts share one hit interval per enemy.
-    if(power>0){damage(enemy,power);enemy.jigongWindReadyAt=pulseAt+jigongWindInterval;}
-    if(!nearest||nearestSq===0||enemy.hp<=0||enemy.stun>0)continue;
-    const gap=Math.sqrt(nearestSq),resistance=(enemy===boss||enemy.mini) ? .25 : 1;
-    const portion=Math.min(1,Math.max(jigongWindPullSpeed,enemy.speed*1.2)*resistance*dt/gap);
-    enemy.x=clamp(enemy.x+(nearest.x-enemy.x)*portion,15,mapWidth-15);
-    enemy.y=clamp(enemy.y+(nearest.y-enemy.y)*portion,15,mapHeight-15);
-  }
-  jigongWindCasts=jigongWindCasts.filter(cast=>elapsed<cast.endsAt||cast.nextPulse<=cast.endsAt+1e-9);
-}
-function useJigongSkills(dt,target,enemies){
-  player.jigong.forEach((skill,index)=>{
-    if(!player.skillLevels[index])return;
-    skill.timer=Math.max(0,skill.timer-dt);
-    if(skill.castAt!==null&&elapsed>=skill.castAt){launchJigongVolley(index,skill);skill.castAt=null;}
-    if(skill.timer>0||skill.castAt!==null||!target||distance(target,player)>425)return;
-    poseForAttack(target);skill.castAt=elapsed+.10;skill.timer=skill.cooldown;
-  });
-  jigongShots=jigongShots.filter(shot=>advanceJigongShot(shot,dt,enemies));
-  for(const enemy of enemies)if(enemy.jigongWaterNextTick!==undefined)tickJigongWater(enemy);
-}
-function useSkills(dt,enemies){
-  const qi=player.qi;
-  qi.timer=Math.max(0,qi.timer-dt);
-  player.ringTimer-=dt;player.brickTimer-=dt;
-  const jigong=player.character==='jigong';
-  let target;
-  if(qi.timer===0||(player.rings&&player.ringTimer<=0)||(player.bricks&&player.brickTimer<=0)||
-    (jigong&&player.jigong.some((skill,index)=>player.skillLevels[index]&&skill.timer<=dt))){
-    const targets=nearestTargets(enemies);
-    target=targets[0];
-    const aim=target?Math.atan2(target.y-player.y,target.x-player.x):player.heading;
-    if(qi.timer===0&&target&&distance(target,player)<=qiRange){
-      poseForAttack(target);
-      for(const enemy of targets.slice(0,qi.targets)){
-        if(distance(enemy,player)>qiRange)break;
-        launchTargetedBolt(player,enemy,qiSpeed);
-      }
-      qi.timer=qi.cooldown;
-    }
-    if(player.rings&&player.ringTimer<=0&&target){
-      poseForAttack(target);
-      for(let i=0;i<player.rings;i++){
-        const offset=i-(player.rings-1)/2;
-        const angle=aim+(player.pattern===2?i*2*Math.PI/player.rings:offset*(player.pattern===1?.29:.037));
-        const lag=player.pattern===0?i*.075:0;
-        shots.push({x:player.x,y:player.y,angle,lag,life:1.2,fire:player.evolved[0]});
-      }
-      player.ringTimer=ringCooldown;
-    }
-    if(player.bricks&&player.brickTimer<=0&&target){
-      poseForAttack(target);
-      for(let i=0;i<player.bricks;i++){
-        const enemy=targets[i%targets.length];
-        const offset=targets.length<=i?12*(i%3-1):0;
-        bricks.push({x:enemy.x+offset,y:enemy.y-offset,fromX:player.x,fromY:player.y,left:.4+i*.09,ingot:player.evolved[2]});
-      }
-      player.brickTimer=brickCooldown;
-    }
-  }
-  if(jigong)useJigongSkills(dt,target,enemies);
-  targetedBolts=targetedBolts.filter(bolt=>{
-    bolt.life-=dt;
-    if(bolt.life<=0||bolt.target.hp<=0)return false;
-    const gap=distance(bolt,bolt.target),step=bolt.speed*dt;
-    if(gap<=step+bolt.target.r){
-      if(bolt.basePower===null)applyHit(bolt.target,Math.round(player.attack));
-      else damage(bolt.target,bolt.basePower);
-      return false;
-    }
-    const dx=bolt.target.x-bolt.x,dy=bolt.target.y-bolt.y;
-    bolt.angle=Math.atan2(dy,dx);
-    bolt.x+=dx*step/gap;bolt.y+=dy*step/gap;
-    return true;
-  });
-  shots=shots.filter(shot=>{
-    shot.lag-=dt;
-    if(shot.lag>0){shot.x=player.x;shot.y=player.y;return true;}
-    shot.life-=dt;
-    if(shot.life<=0)return false;
-    shot.x+=Math.cos(shot.angle)*415*dt;shot.y+=Math.sin(shot.angle)*415*dt;
-    const hit=enemies.find(enemy=>enemy.hp>0&&distance(shot,enemy)<enemy.r+11);
-    if(hit){
-      const value=player.ringDamage*(shot.fire?1.5:1);
-      damage(hit,value);
-      if(shot.fire&&Math.random()<ringExplosionChance)explodeRingHit(hit,value,enemies);
-    }
-    return !hit;
-  });
-  bricks=bricks.filter(brick=>{
-    brick.left-=dt;
-    if(brick.left>0)return true;
-    sparks.push({x:brick.x,y:brick.y,life:.45,r:57});
-    for(const enemy of enemies){
-      if(enemy.hp<=0||distance(brick,enemy)>57+enemy.r)continue;
-      damage(enemy,player.brickDamage);
-      if(Math.random()<.5)enemy.stun=3;
-    }
-    if(brick.ingot)ingots.push({x:brick.x,y:brick.y,life:10,nextShotAt:elapsed+ingotShotInterval});
-    return false;
-  });
 }
 function heal(fraction){
   player.hp=Math.min(player.maxHp,player.hp+player.maxHp*fraction);
@@ -1861,24 +1338,6 @@ function collectLoot(dt){
     return false;
   });
 }
-function updateIngots(dt,enemies){
-  ingots=ingots.filter(ingot=>{
-    ingot.life-=dt;
-    if(ingot.life<=0)return false;
-    if(elapsed<ingot.nextShotAt)return true;
-    let target=null,nearest=ingotRange;
-    for(const enemy of enemies){
-      if(enemy.hp<=0)continue;
-      const gap=distance(ingot,enemy);
-      if(gap<=nearest){target=enemy;nearest=gap;}
-    }
-    if(target){
-      launchTargetedBolt(ingot,target,ingotShotSpeed,player.brickDamage*ingotShotDamage);
-      ingot.nextShotAt+=ingotShotInterval;
-    }else ingot.nextShotAt=elapsed+.16;
-    return true;
-  });
-}
 function separateEnemies(enemies){
   if(enemies.length<2)return;
   const cellSize=104;
@@ -1939,7 +1398,8 @@ function update(dt){
   trackCamera();
   updateSpawns(dt);
   const enemies=boss?[...mobs,boss]:mobs;
-  useSkills(dt,enemies);
+  skillCombat.frame(player,elapsed,mapWidth,mapHeight,boss,sparks);
+  skillCombat.useSkills(dt,enemies);
   const wheelStart=player.wheelAngle,wheelSweep=player.wheelSpeed*dt;
   const flameWheel=player.wheels>0&&player.evolved[1];
   const hitRadius=wheelHitRadius*(flameWheel?wheelEvolutionScale:1);
@@ -1950,15 +1410,15 @@ function update(dt){
     trailTimer=.035;
   }
   wheelTrail=wheelTrail.filter(flame=>(flame.life-=dt)>0);
-  updateIngots(dt,enemies);
+  skillCombat.updateIngots(dt,enemies);
   player.wheelTimer-=dt;
   for(const enemy of enemies){
     if(enemy.hp<=0)continue;
     enemy.flash-=dt;enemy.stun-=dt;
-    if(player.wheels&&elapsed>=(enemy.wheelReadyAt??0)&&wheelSweepsEnemy(enemy,wheelStart,wheelSweep,hitRadius)){
+    if(player.wheels&&elapsed>=(enemy.wheelReadyAt??0)&&skillCombat.wheelSweepsEnemy(enemy,wheelStart,wheelSweep,hitRadius)){
       enemy.wheelReadyAt=elapsed+wheelCooldown;
-      damage(enemy,player.wheelDamage);player.wheelTimer=wheelCooldown;
-      if(elapsed>=player.attackUntil+.14)poseForAttack(enemy);
+      skillCombat.damage(enemy,player.wheelDamage);player.wheelTimer=wheelCooldown;
+      if(elapsed>=player.attackUntil+.14)skillCombat.poseForAttack(enemy);
       if(flameWheel&&enemy.hp>0&&elapsed>=(enemy.wheelKnockbackReadyAt??0)){
         const [kx,ky]=unit(enemy.x-player.x,enemy.y-player.y);
         const force=enemy.name?24:55;
@@ -1974,12 +1434,12 @@ function update(dt){
     const followRange=enemy.kind==='caster'?175:enemy.kind==='healer'?100:enemy.r+12;
     if(gap>followRange&&!enemy.aim){
       const [mx,my]=unit(player.x-enemy.x,player.y-enemy.y);
-      const step=enemy.speed*jigongSlowFactor(enemy)*dt;
+      const step=enemy.speed*skillCombat.jigongSlowFactor(enemy)*dt;
       enemy.x+=mx*step;enemy.y+=my*step;
       if(Math.abs(mx)>.08)enemy.facing=Math.sign(mx);
     }
   }
-  if(jigongWindCasts.length)advanceJigongWind(dt,enemies);
+  if(skillCombat.effects().jigongWindCasts.length)skillCombat.advanceJigongWind(dt,enemies);
   separateEnemies(enemies);
   // Contact must match the settled positions that the player sees after knockback and separation.
   for(const enemy of enemies){
@@ -1995,19 +1455,29 @@ function update(dt){
     boss.cast-=dt;
     if(boss.cast<=0){
       boss.cast=boss.interval*(1-.25*bossPressure());
-      const spread=boss.spread??(boss.at===480?3:boss.at===300?2:1);
-      for(let i=0;i<spread;i++){
-        const offset=(i-(spread-1)/2)*76;
-        warnings.push({x:clamp(player.x+offset,20,mapWidth-20),
-          y:clamp(player.y+(i%2?52:0),20,mapHeight-20),
-          r:boss.at===480?57:48,life:1.25,duration:1.25,damage:enemyAttack(boss),source:boss.name+'的範圍攻擊'});
+      if(towerFloor){
+        const attack=NezhaRules.towerCast(towerFloor,boss.patternIndex++,boss,player);
+        for(const mark of attack.marks)warnings.push({...mark,life:attack.duration,duration:attack.duration,
+          castId:boss.patternIndex,damage:enemyAttack(boss)*attack.power,source:boss.name+'・'+attack.name});
+      }else{
+        const spread=boss.at===480?3:boss.at===300?2:1;
+        for(let i=0;i<spread;i++){
+          const offset=(i-(spread-1)/2)*76;
+          warnings.push({x:clamp(player.x+offset,20,mapWidth-20),
+            y:clamp(player.y+(i%2?52:0),20,mapHeight-20),
+            r:boss.at===480?57:48,life:1.25,duration:1.25,damage:enemyAttack(boss),source:boss.name+'的範圍攻擊'});
+        }
       }
     }
   }
+  const hitCasts=new Set();
   warnings=warnings.filter(mark=>{
     mark.life-=dt;
     if(mark.life>0)return true;
-    if(distance(mark,player)<mark.r)hurt(mark.damage,mark.source);
+    if(distance(mark,player)<mark.r&&(!mark.castId||!hitCasts.has(mark.castId))){
+      hurt(mark.damage,mark.source);
+      if(mark.castId)hitCasts.add(mark.castId);
+    }
     sparks.push({x:mark.x,y:mark.y,life:.32,r:mark.r});
     return false;
   });
@@ -2176,43 +1646,8 @@ function background(){
     }
   }
 }
-function paintEnemy(target,kind,frame,color){
-  const p=(ink,x,y,w,h)=>pixel(target,ink,x,y,w,h);
-  const dark='#202b32',gold='#ffd079',white='#f5efd6';
-  if(kind==='dragon'){
-    p(dark,1,12,22,9);p(dark,3,7,18,15);p(dark,5,2,4,11);p(dark,15,2,4,11);
-    p(gold,6,3,2,7);p(gold,16,3,2,7);p(color,4,9,16,10);p(color,2,13,20,6);
-    p('#6c5148',7,19,10,3);p(gold,8,17,8,3);p(dark,10,18,1,1);p(dark,13,18,1,1);
-    p(white,6,12,4,3);p(white,14,12,4,3);p(dark,8,12,2,3);p(dark,14,12,2,3);
-    p('#e87749',10,8,4,2);p(gold,2,19+frame,4,2);p(gold,18,19-frame,4,2);
-    return;
-  }
-  p(dark,5,3,14,3);p(dark,3,6,18,14);p(dark,2,15,20,5);
-  p(color,6,5,12,2);p(color,4,7,16,12);
-  p(color,4,18,4,2+frame);p(color,10,18,4,3-frame);p(color,16,18,4,2+frame);
-  p(dark,7,10,3,4);p(dark,14,10,3,4);p(white,7,10,1,1);p(white,14,10,1,1);p(dark,10,15,4,1);
-  if(kind==='runner'){
-    p(dark,0,9,5,3);p(gold,0,9,4,1);p(dark,19,8,5,3);p(gold,20,9,4,1);
-  }
-  if(kind==='guard'){
-    p('#475b68',5,6,14,3);p('#a1b9bc',6,6,12,1);
-    p(dark,15,12,7,9);p('#8eafb5',16,13,5,7);p(gold,18,15,1,3);
-  }
-  if(kind==='healer'){
-    p('#527a63',4,5,16,3);p(white,11,5,2,6);p(white,9,7,6,2);
-  }
-  if(kind==='caster'){
-    p(dark,8,1,8,5);p('#7a61a2',10,1,4,5);p(gold,11,4,2,2);
-    p(dark,19,7,2,13);p(gold,18,5,4,4);
-  }
-  if(kind==='mini'||kind==='boss'){
-    p(dark,3,2,3,5);p(dark,18,2,3,5);p(gold,4,2,2,4);p(gold,18,2,2,4);
-    p(white,8,16,2,2);p(white,14,16,2,2);
-  }
-}
-const enemyColors={shade:'#e1ded0',runner:'#f09273',guard:'#718d9f',healer:'#82cb9f',caster:'#af9fdb'};
 function ghost(enemy){
-  const kind=enemy===boss?(enemy.at===480||enemy.spread?'dragon':'boss'):enemy.mini?'mini':enemy.kind??'shade';
+  const kind=enemy===boss?(enemy.at===rounds||towerFloor?'dragon':'boss'):enemy.mini?'mini':enemy.kind??'shade';
   const casting=Boolean(enemy.aim)||(enemy===boss&&enemy.cast<.28);
   const frame=casting?1:Math.floor(elapsed*7+(enemy.phase??0))%2;
   const y=Math.round(enemy.y)+(enemy.stun>0?0:frame*3);
@@ -2366,7 +1801,7 @@ function drawJigongShot(shot){
   }
   ctx.restore();
 }
-function drawJigongWindEyes(){
+function drawJigongWindEyes(jigongWindCasts){
   const r=jigongWindRadius;
   for(const cast of jigongWindCasts)for(const eye of cast.eyes){
     const {x,y}=eye;
@@ -2392,12 +1827,13 @@ function drawPlayerHealth(){
   if(hp>0)pixel(ctx,fill,x+2,y+2,Math.max(2,Math.round((w-4)*hp)),h-4);
 }
 function draw(){
+  const {jigongWindCasts,jigongShots,ingots,targetedBolts,shots,bricks}=skillCombat.effects();
   // Keep the display camera separate from the combat viewport.
   view.width=width/viewZoom;view.height=height/viewZoom;
   centerCamera(view,view.width,view.height);
   ctx.save();ctx.scale(viewZoom,viewZoom);ctx.translate(-view.x,-view.y);
   background();
-  if(jigongWindCasts.length)drawJigongWindEyes();
+  if(jigongWindCasts.length)drawJigongWindEyes(jigongWindCasts);
   for(const mark of warnings){
     const charge=clamp(1-mark.life/mark.duration,0,1);
     drawGroundWarning(mark.x,mark.y,mark.r,charge);
@@ -2538,7 +1974,7 @@ function drawSkillHud(){
   const jigong=player.character==='jigong';
   const limits=jigong?player.jigong.map(skill=>skill.cooldown):[ringCooldown,wheelCooldown,brickCooldown];
   const cooldowns=jigong?player.jigong.map(skill=>skill.timer):[player.ringTimer,player.wheelTimer,player.brickTimer];
-  const openSlot=hasFreeSkillSlot();
+  const openSlot=NezhaRules.hasSlot(player);
   skillSlots.forEach(({name,status,bar},index)=>{
     const level=player.skillLevels[index];
     const cooldown=Math.max(0,cooldowns[index]);
@@ -2549,7 +1985,7 @@ function drawSkillHud(){
     setText(status,level?'Lv.'+level+' · '+'CD '+cooldown.toFixed(1)+' 秒':openSlot?'尚未解鎖':'需絕世寶典');
     setProgress(bar,level?1-cooldown/limits[index]:0);
   });
-  setText(gear,gearNames.map((name,index)=>name+' Lv.'+player.gear[index]).join('　'));
+  setText(gear,NezhaRules.gearNames.map((name,index)=>name+' Lv.'+player.gear[index]).join('　'));
 }
 function setText(element,value){
   const text=String(value);
@@ -2561,6 +1997,12 @@ function setProgress(element,value,max=1){
   if(element.value!==next||!element.hasAttribute('value'))element.value=next;
 }
 const updateHistory=[
+  {date:'2026-11-23',title:'雙人主線、共用無限塔排行與救援',changes:[
+    ['雙人闖關','兩位玩家從 8 分鐘主線出發，在第 2、5、8 分鐘挑戰魔王。擊退龍王後進入無限塔，每層擊退 1,000 隻怪物後挑戰守關魔王。'],
+    ['強化與怪物','雙人共用單人的怪物種類、氣功、法寶及進化規則。雙方共享拾取的經驗值，但各自選擇強化；小魔王仍提供神刀、神甲、神馬和大魂丹四選一。'],
+    ['救援','一方倒地後，隊友在救援範圍內停留 3 秒，可使倒地玩家恢復 30% 最大生命。離開範圍會中斷，兩人都倒地才結束。'],
+    ['無限塔魔王與榜單','單人與雙人塔王都新增天火隕落、玄冰環陣、裂地雷擊與八方震波，施放前會標出範圍。雙人通過塔層的成績會更新至原有的個人前 100 名排行榜，只覆蓋更高的通關紀錄。']
+  ]},
   {date:'2026-11-23',title:'重大更新001・版本 0.112301',changes:[
     ['帳號與好友','可在大廳修改暱稱，並送出、接受好友邀請；改名不會影響好友或遊戲進度。'],
     ['密語頻道','點選玩家名稱或在電腦按右鍵可開啟互動選單。密語在獨立頻道接收，並顯示未讀提醒。'],

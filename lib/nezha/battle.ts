@@ -1,6 +1,7 @@
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { GameError, limitAttempts } from "./session";
+import { saveScore } from "./scores";
 
 export function battleConnection() {
   const secret = process.env.NEZHA_BATTLE_SECRET;
@@ -36,4 +37,33 @@ export async function battleTicket(accountId: string) {
   const payload = Buffer.from(JSON.stringify({ party: party.id, player: accountId, roster, expires: Date.now() + 60_000 })).toString("base64url");
   const mac = createHmac("sha256", connection.secret).update("nezha-battle:" + payload).digest("base64url");
   return { url: connection.url, ticket: payload + "." + mac };
+}
+
+export async function saveBattleResult(accountId: string, value: unknown, publish: unknown) {
+  const connection = battleConnection();
+  const invalid = () => new GameError(400, "無法驗證這場雙人戰鬥的紀錄，請從結算畫面再試一次。");
+  if (!connection || typeof value !== "string" || value.length > 512 || !/^[\w-]+\.[\w-]{43}$/.test(value)) throw invalid();
+  const [payload, signature] = value.split(".");
+  const mac = createHmac("sha256", connection.secret).update("nezha-battle-result:" + payload).digest();
+  const received = Buffer.from(signature, "base64url");
+  if (mac.length !== received.length || !timingSafeEqual(mac, received)) throw invalid();
+  const result = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  const now = new Date();
+  if (result.player !== accountId || !Number.isSafeInteger(result.expires) || result.expires < now.getTime() ||
+    ![result.cleared, result.kills].every(Number.isSafeInteger) || result.cleared < 0 || result.kills < result.cleared * 1000) throw invalid();
+
+  await prisma.nezhaAccount.updateMany({
+    where: { id: accountId, suspendedAt: null, jigongUnlockedAt: null },
+    data: { jigongUnlockedAt: now }
+  });
+  if (result.cleared > 0) {
+    await prisma.nezhaAccount.updateMany({
+      where: { id: accountId, suspendedAt: null, towerStartUnlockedAt: null },
+      data: { towerStartUnlockedAt: now }
+    });
+    if (publish === true) return {
+      ...await saveScore({ cleared: result.cleared, kills: result.kills, progress: 0 }, accountId), cleared: result.cleared
+    };
+  }
+  return { enteredTower: true, cleared: result.cleared };
 }

@@ -8,7 +8,7 @@ import { getLobbyMessages, sendLobbyMessage } from "@/lib/nezha/lobby";
 import { getGameProfile, recordTowerCheckpoint, recordTowerEntry, selectGameCharacter, startUnlockRun } from "@/lib/nezha/progress";
 import { gmAuthorized, gmCookie, gmPath, gmSessionSeconds, listGmRecords, loginGm, updateGmRecord } from "@/lib/nezha/gm";
 import { readSocial, socialRelease, writeSocial } from "@/lib/nezha/social";
-import { battleConnection, battleTicket } from "@/lib/nezha/battle";
+import { battleConnection, battleTicket, saveBattleResult } from "@/lib/nezha/battle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +37,9 @@ const assetTypes = {
   "social.js": "application/javascript; charset=utf-8",
   "battle.html": "text/html; charset=utf-8",
   "battle.js": "application/javascript; charset=utf-8",
+  "battle-rules.js": "application/javascript; charset=utf-8",
+  "battle-combat.js": "application/javascript; charset=utf-8",
+  "enemy-art.js": "application/javascript; charset=utf-8",
   "nezha.webp": "image/webp",
   "nezha-sheet.png": "image/png",
   "jigong-attack-sheet.png": "image/png"
@@ -153,6 +156,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       case "jigong-attack-sheet.png":
       case "social.js":
       case "battle.js":
+      case "battle-rules.js":
+      case "battle-combat.js":
+      case "enemy-art.js":
         if ((await gameSession(request))?.account.nickname) return await asset(path);
         break;
       case "api/session": {
@@ -211,6 +217,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (path === "api/battle-ticket") {
       if (!account.nickname || !socialRelease().features.battle) throw new GameError(404, "雙人戰鬥尚未開放。");
       return json(await battleTicket(account.id));
+    }
+    if (path === "api/battle-result") {
+      if (!account.nickname || !socialRelease().features.battle) throw new GameError(404, "雙人戰鬥尚未開放。");
+      if (await limitAttempts(`battle-result:${account.id}`, 16)) throw new GameError(429, "操作太頻繁，請稍後再試。");
+      return json(await saveBattleResult(account.id, data.proof, data.publish));
     }
     if (path && /^api\/social\/(?:profile|friends|whispers|party)$/.test(path)) {
       if (!account.nickname) throw new GameError(403, "請先設定暱稱。");

@@ -6,17 +6,28 @@
 <title>雙人守廟埕｜神明Q仙傳</title>
 <style>
 :root{color-scheme:dark;background:#111f25;color:#fff0d7;font:16px system-ui,sans-serif}*{box-sizing:border-box}
-body{margin:0}main{display:grid;grid-template-rows:auto auto minmax(0,1fr);min-height:320px;height:100dvh;padding:10px;gap:7px}
+body{margin:0;overscroll-behavior:none}main{display:grid;grid-template-rows:auto auto minmax(0,1fr);min-height:320px;height:100dvh;padding:10px;gap:7px}
 header,#players{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px}h1{font-size:20px;margin:0;color:#ffd07a}
 a,button{font:inherit;color:#31211c;background:#ffd07a;border:1px solid #a86642;border-radius:4px;padding:5px 9px;text-decoration:none}
 #players{flex-wrap:nowrap;margin:0;padding:0;list-style:none;font-size:13px}
 #players li{border:1px solid #456060;border-radius:4px;padding:4px 7px;min-width:0;flex:1;overflow-wrap:anywhere}
-#players span{display:block;white-space:nowrap}#players span:first-child{overflow:hidden;text-overflow:ellipsis}
+#players span{display:block}#players span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .field{position:relative;min-height:0;border:2px solid #ac8053;border-radius:4px;background:#21343b;overflow:hidden}
 canvas{width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:none}
 #stage,#link-state{position:absolute;inset-inline:8px;pointer-events:none;margin:0;text-shadow:0 2px #101d21;font-weight:700}
-#stage{top:8px}#link-state{bottom:8px;color:#ffd07a}#retry[hidden]{display:none}
-@media(max-width:480px){main{padding:6px}h1{font-size:17px}#stage,#link-state{font-size:13px}#players{font-size:12px}}
+#stage{top:8px}#link-state{bottom:58px;color:#ffd07a}button{cursor:pointer}button:disabled{cursor:default;opacity:.55}
+[hidden]{display:none!important}
+#battle-actions{position:absolute;inset:auto 8px 8px;display:flex;gap:6px;justify-content:flex-end;pointer-events:none}
+#battle-actions button{pointer-events:auto;min-height:40px}
+#upgrade-panel{position:absolute;inset:auto 8px 58px auto;width:min(370px,calc(100% - 16px));max-height:calc(100% - 107px);overflow:auto;overscroll-behavior:contain;background:#16282f;border:1px solid #b08853;border-radius:4px;padding:10px}
+#upgrade-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+#upgrade-panel h2{margin:0;color:#ffd07a;font-size:16px}
+#upgrade-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+#upgrade-options button{min-height:42px;text-align:left;background:#273d43;color:#fff0d7;border-color:#56665c;font-size:13px;overflow-wrap:anywhere}
+#upgrade-options button:hover:not(:disabled){background:#3a504e;border-color:#ffd07a}
+#score-status{position:absolute;inset:auto 8px 58px;pointer-events:none;margin:0;color:#92dfba;text-shadow:0 2px #101d21}
+#link-state:not(:empty)+#score-status{bottom:86px}
+@media(max-width:480px){main{padding:6px}h1{font-size:17px}#stage,#link-state,#score-status{font-size:13px}#players{font-size:12px}}
 </style>
 <main>
 <header><h1>神明Q仙傳・雙人守廟埕</h1><div><button id="retry" type="button" hidden>重連</button> <a href="/games/nezha/game">返回大廳</a></div></header>
@@ -24,7 +35,17 @@ canvas{width:100%;height:100%;display:block;image-rendering:pixelated;touch-acti
 <section class="field" aria-label="雙人戰鬥區">
 <canvas id="battle-arena" aria-label="雙人戰鬥地圖"></canvas>
 <p id="stage"></p><p id="link-state" role="status">連接戰鬥房間中…</p>
+<p id="score-status" hidden></p>
+<div id="battle-actions">
+  <button id="rank-save" type="button" hidden>重新儲存成績</button>
+  <button id="upgrade-toggle" type="button" aria-controls="upgrade-panel" aria-expanded="false" hidden>強化</button>
+</div>
+<aside id="upgrade-panel" aria-labelledby="upgrade-title" hidden>
+  <div id="upgrade-header"><h2 id="upgrade-title"></h2><button id="upgrade-close" type="button" aria-label="收起強化面板">×</button></div>
+  <div id="upgrade-options"></div>
+</aside>
 </section>
 </main>
+<script src="/games/nezha/enemy-art.js"></script>
 <script src="/games/nezha/battle.js"></script>
 </html>
