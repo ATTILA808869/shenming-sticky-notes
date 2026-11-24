@@ -7,7 +7,7 @@
 <link rel="preload" as="image" href="/games/nezha/nezha-sheet.png" fetchpriority="high">
 <link rel="stylesheet" href="/games/nezha/battle-ui.css">
 <main>
-<header><div><a href="/" style="color:inherit"><small>神明便利貼</small></a><strong>神明Q仙傳</strong></div><div class="account"><span id="nickname"></span><button id="updates" type="button" aria-haspopup="dialog">更新日誌</button><button id="logout">登出</button><button id="pause" disabled>暫停</button></div></header>
+<header><div><a href="/" style="color:inherit"><small>神明便利貼</small></a><strong>神明Q仙傳</strong></div><div class="account"><span id="nickname"></span><button id="account-info" type="button" aria-haspopup="dialog" hidden>帳號資訊</button><button id="updates" type="button" aria-haspopup="dialog">更新日誌</button><button id="logout">登出</button><button id="pause" disabled>暫停</button></div></header>
 <div class="field">
 <canvas id="arena" aria-label="廟埕遊戲區"></canvas>
 <canvas id="player-sprite" aria-hidden="true"></canvas>
@@ -523,8 +523,8 @@ async function accountRequest(path,data,signal){
 }
 const lobbyViews=[
   ['home','大廳',mountLobbyHome],
-  ['ranking','排行榜',mountLobbyRanking],
   ['chat','聊天室',mountLobbyChat],
+  ['ranking','排行榜',mountLobbyRanking],
   ['character','角色',mountLobbyCharacter]
 ];
 function refreshLobbyPlay(){
@@ -623,14 +623,12 @@ function showLobby(){
   tower.textContent='從無限塔第 1 層開始';
   tower.onclick=event=>void start(event,true);
   actions.append(play,tower);
-  const billboard=document.createElement('section');billboard.className='lobby-billboard';billboard.hidden=true;
-  billboard.setAttribute('aria-labelledby','billboard-title');actions.after(billboard);
   refreshLobbyPlay();
 
   let active,controller;
   const lobbyWork=new AbortController();
   closeLobby=()=>{controller?.abort();lobbyWork.abort();};
-  const views=[...lobbyViews,...lobbySocialViews()];
+  const views=[...lobbyViews,...lobbySocialViews(),['billboard','廟埕布告欄',mountLobbyBillboard]];
   const buttons=views.map(([id,label,mount])=>{
     const button=document.createElement('button');button.type='button';button.textContent=label;
     button.dataset.lobbyTab=id;
@@ -643,8 +641,11 @@ function showLobby(){
       active=id;
       content.replaceChildren();
       content.classList.toggle('lobby-chat-view',id==='chat');
+      content.classList.toggle('lobby-billboard-view',id==='billboard');
+      panels.classList.toggle('is-billboard',id==='billboard');
+      actions.hidden=id==='billboard';
+      content.scrollTop=0;
       mount(content,controller.signal);
-      if(id==='home')mountLobbyBillboard(billboard,controller.signal);
     };
     nav.append(button);
     return button;

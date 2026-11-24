@@ -26,7 +26,7 @@ small{display:block;color:var(--dim);margin-top:3px}.row-actions button{font-siz
 .danger{color:#ffc8be;border-color:#985b55}
 dialog{width:min(390px,calc(100% - 24px));max-height:85svh;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:6px;background:var(--row);color:var(--ink)}
 dialog::backdrop{background:#091417b8}dialog h2{margin:0 0 5px}dialog label{display:grid;gap:6px;margin-top:12px}
-#banner-dialog{width:min(520px,calc(100% - 24px))}.banner-preview{display:block;width:124px;height:60px;object-fit:contain;background:#122228;border:1px solid var(--line);border-radius:4px}.banner-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#banner-dialog{width:min(520px,calc(100% - 24px))}.banner-preview{display:block;width:124px;aspect-ratio:1140/820;object-fit:contain;background:#122228;border:1px solid var(--line);border-radius:4px}.banner-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(max-width:500px){main{padding:12px}h1{font-size:20px}.controls label{flex-basis:200px}}
 </style>
 <main>
@@ -67,7 +67,8 @@ dialog::backdrop{background:#091417b8}dialog h2{margin:0 0 5px}dialog label{disp
       <label>排序（小到大）<input id="banner-order" type="number" min="0" max="999" required></label>
     </div>
     <label>點擊連結（HTTPS）<input id="banner-url" type="url" required maxlength="1024"></label>
-    <label>橫幅圖片（PNG、JPG、WebP，1 MB 內）<input id="banner-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+    <label>橫幅圖片（1140 × 820 px，2 MB 內）<input id="banner-file" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="banner-formats"></label>
+    <small id="banner-formats">支援 PNG、JPG、WebP。</small>
     <img id="banner-current" class="banner-preview" alt="目前的橫幅" hidden>
     <p id="banner-status" role="status"></p>
     <div class="controls"><button type="button" id="banner-cancel">取消</button><button type="submit" id="banner-save" class="primary">儲存</button></div>
@@ -191,7 +192,7 @@ function editBanner(item){
     event.preventDefault();bannerSave.disabled=bannerCancel.disabled=true;bannerStatus.textContent='';
     try{
       const file=bannerFile.files[0];
-      if(file?.size>1024*1024)throw new Error('圖片大小不得超過 1 MB。');
+      if(file?.size>2*1024*1024)throw new Error('圖片大小不得超過 2 MB。');
       const image=file?await new Promise((resolve,reject)=>{
         const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);
         reader.onerror=()=>reject(new Error('無法讀取圖片。'));reader.readAsDataURL(file);

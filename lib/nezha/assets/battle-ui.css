@@ -75,23 +75,24 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!important}
 html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
 .card.lobby-hub{width:min(650px,100%);height:min(550px,100%);display:flex;flex-direction:column;text-align:left}
-.card.lobby-hub:has(.lobby-billboard:not([hidden])){height:min(650px,100%)}
-.lobby-billboard{flex:none;margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+.card.lobby-hub:has(.lobby-billboard-view){height:min(650px,100%)}
+.lobby-panels.is-billboard.with-party{display:flex}
+.is-billboard .lobby-social-rail{display:none}
+.lobby-view.lobby-billboard-view{margin-bottom:0;padding:2px 3px 6px}
 .billboard-bar,.billboard-controls{display:flex;align-items:center;gap:5px}
-.billboard-bar{justify-content:space-between;margin-bottom:5px}
-.billboard-bar h2{font-size:16px;margin:0;color:var(--gold)}
+.billboard-bar{justify-content:space-between;flex-wrap:wrap;margin-bottom:8px}
+.lobby-billboard-view .billboard-bar h2{font-size:18px;margin:0;color:var(--gold)}
 .billboard-controls{flex:none}.billboard-controls button{width:30px;height:32px;padding:0;box-shadow:none;font-size:16px}
 .billboard-count{min-width:46px;text-align:center;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-.billboard-link{display:grid;grid-template-columns:minmax(77px,36%) minmax(0,1fr) auto;align-items:center;gap:9px;height:99px;border:1px solid #ad8d5e;border-radius:4px;background:#152931;color:var(--ink);text-decoration:none;overflow:hidden;padding-right:10px;touch-action:pan-y}
+.billboard-link{display:block;border:1px solid #ad8d5e;border-radius:4px;background:#152931;color:var(--ink);text-decoration:none;overflow:hidden;touch-action:pan-y}
 .billboard-link:hover,.billboard-link:focus-visible{background:#29434a;border-color:var(--gold)}
-.billboard-link img{display:block;width:100%;height:97px;object-fit:contain;background:#101f26}
-.billboard-copy{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}.billboard-copy span{font-size:12px;color:var(--gold)}
-.billboard-copy strong{font-size:15px;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.billboard-link img{display:block;width:100%;height:auto;aspect-ratio:1140/820;object-fit:contain;background:#101f26}
+.billboard-copy{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;min-height:44px;padding:7px 10px;overflow-wrap:anywhere}.billboard-copy span{font-size:12px;color:var(--gold)}
+.billboard-copy strong{font-size:15px;line-height:1.3}
 .billboard-live{position:absolute;inline-size:1px;block-size:1px;overflow:hidden;clip-path:inset(50%)}
-@media(max-height:510px){.lobby-billboard{margin-top:6px;padding-top:4px}.billboard-link{height:62px}.billboard-link img{height:60px}}
 .lobby-hub>.actions,.lobby-nav{flex:none}
 #lobby-tower-start{background:#263c43;color:var(--gold);border-color:#ad8d5e}
-.lobby-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(62px,1fr));gap:5px;margin:12px 0;border-bottom:1px solid var(--line)}
+.lobby-nav{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:5px;margin:12px 0;border-bottom:1px solid var(--line)}
 .lobby-nav button{min-width:0;min-height:40px;padding:6px 2px;background:transparent;color:var(--muted);border:0;border-bottom:3px solid transparent;box-shadow:none;font-size:14px}
 .lobby-nav button:hover:enabled{background:#29434a;color:var(--ink)}
 .lobby-nav button[aria-current]{border-bottom-color:var(--gold);color:var(--gold);background:#263c43}
@@ -143,6 +144,9 @@ html.lobby .unlock-toast{display:none}
 .player-action{padding:3px 0;min-width:0;overflow-wrap:anywhere;background:none;color:var(--gold);border:0;box-shadow:none;font:inherit;font-weight:700;text-align:start}
 .player-action:hover:enabled{box-shadow:none;text-decoration:underline;background:none;color:var(--gold)}
 .social-dialog .actions{margin:10px 0}
+.account-dialog{width:min(380px,calc(100% - 26px))}
+.account-dialog .lobby-form{grid-template-columns:minmax(0,1fr);margin-top:14px}
+.account-dialog .lobby-form button{justify-self:start}
 .social-list{list-style:none;margin:4px 0 12px;padding:0}
 .social-list li{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px 10px;padding:7px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
 .social-field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
@@ -170,6 +174,9 @@ html.lobby .unlock-toast{display:none}
 .lobby-room [role=status]:empty{display:none}
 @media(max-width:560px){
   main{padding:8px;gap:6px}header strong{font-size:18px}.account{gap:4px;font-size:12px}
+  .account:has(#account-info:not([hidden])) #nickname{display:none}
+  .account:has(#account-info:not([hidden])) button{padding:4px 5px;white-space:nowrap}
+  .lobby-nav{grid-auto-flow:row;grid-template-columns:repeat(3,minmax(0,1fr))}
   .hud{inset-inline:6px;top:6px;grid-template-columns:minmax(0,max-content) 1fr auto}
   .hud #clock{justify-self:center}.hud span,.stats{padding:4px;font-size:11px}
   .wave{top:35px;right:6px;font-size:10px}.bossbar{top:75px}
@@ -179,6 +186,11 @@ html.lobby .unlock-toast{display:none}
 }
 @media(max-width:420px){
   .skills{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+}
+@media(max-width:360px){
+  header strong{font-size:16px}
+  .account:has(#account-info:not([hidden])){gap:3px}
+  .account:has(#account-info:not([hidden])) button{padding-inline:3px}
 }
 @media(max-height:470px){
   main{padding-block:5px;gap:4px}

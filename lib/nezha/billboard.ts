@@ -1,7 +1,9 @@
+import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { GameError } from "@/lib/nezha/session";
 
-const maxImageBytes = 1024 * 1024;
+const maxImageBytes = 2 * 1024 * 1024;
+const bannerWidth = 1140, bannerHeight = 820;
 export const billboardBodyLimit = Math.ceil(maxImageBytes / 3) * 4 + 8192;
 const validId = /^[a-zA-Z0-9-]{1,48}$/;
 const select = { id: true, title: true, kind: true, targetUrl: true, sortOrder: true, published: true, assetPath: true, imageType: true, updatedAt: true } as const;
@@ -34,17 +36,22 @@ function billboardLink(value: unknown) {
   }
 }
 
-function billboardImage(value: unknown) {
+async function billboardImage(value: unknown) {
   if (typeof value !== "string" || !value || value.length > billboardBodyLimit || value.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
     throw new GameError(400, "無法讀取圖片。");
   }
   const image = Buffer.from(value, "base64");
-  if (image.length > maxImageBytes) throw new GameError(413, "圖片大小不得超過 1 MB。");
+  if (image.length > maxImageBytes) throw new GameError(413, "圖片大小不得超過 2 MB。");
   let imageType: string | undefined;
   if (image.length >= 33 && image.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")) && image.toString("ascii", 12, 16) === "IHDR") imageType = "image/png";
   if (image.length >= 16 && image.subarray(0, 3).equals(Buffer.from("ffd8ff", "hex"))) imageType = "image/jpeg";
   if (image.length >= 16 && image.toString("ascii", 0, 4) === "RIFF" && image.toString("ascii", 8, 12) === "WEBP") imageType = "image/webp";
   if (!imageType) throw new GameError(400, "請上傳 PNG、JPG 或 WebP 圖片。");
+  const metadata = await sharp(image, { limitInputPixels: bannerWidth * bannerHeight }).metadata().catch(() => null);
+  if (!metadata) throw new GameError(400, `無法讀取圖片，請確認格式與尺寸（${bannerWidth} × ${bannerHeight} px）。`);
+  if (metadata.width !== bannerWidth || metadata.height !== bannerHeight || (metadata.orientation ?? 1) >= 5) {
+    throw new GameError(400, `橫幅圖片須為 ${bannerWidth} × ${bannerHeight} px。`);
+  }
   return { image: new Uint8Array(image), imageType, assetPath: null };
 }
 
@@ -58,7 +65,7 @@ export async function updateBillboard(data: Record<string, unknown>) {
     if (!title || title.length > 70 || (kind !== "ad" && kind !== "notice") || typeof sortOrder !== "number" || !Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 999) {
       throw new GameError(400, "請確認標題、分類與排序（0 至 999）。");
     }
-    const fields = { title, kind, sortOrder, targetUrl: billboardLink(data.targetUrl), ...(data.image === undefined ? {} : billboardImage(data.image)) };
+    const fields = { title, kind, sortOrder, targetUrl: billboardLink(data.targetUrl), ...(data.image === undefined ? {} : await billboardImage(data.image)) };
     if (!id) {
       if (!fields.image) throw new GameError(400, "請上傳橫幅圖片。");
       await prisma.nezhaBillboard.create({ data: fields });
