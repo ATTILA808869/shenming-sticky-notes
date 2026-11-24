@@ -74,8 +74,7 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 .ranking-editor button{justify-self:start;padding:5px 12px}
 html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!important}
 html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
-.card.lobby-hub{width:min(650px,100%);height:min(550px,100%);display:flex;flex-direction:column;text-align:left}
-.card.lobby-hub:has(.lobby-billboard-view){width:min(740px,100%);height:min(750px,100%)}
+.card.lobby-hub{width:min(740px,100%);height:min(750px,100%);display:flex;flex-direction:column;text-align:left}
 .lobby-panels.is-billboard.with-party{display:flex}
 .is-billboard .lobby-social-rail{display:none}
 .lobby-view.lobby-billboard-view{margin-bottom:0;padding:2px 3px 6px;container-type:size}
