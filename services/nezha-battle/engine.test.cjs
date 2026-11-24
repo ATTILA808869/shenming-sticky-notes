@@ -106,18 +106,18 @@ test("boss XP queues individual upgrades and each upgrade can be selected only o
   assert.equal(pendingReward(a).options.length, 7);
 });
 
-test("the tower guardian gives each eligible player a 5% tome roll", () => {
+test("the tower guardian gives each eligible player a 15% tome roll", () => {
   assert.equal(R.rollSkillTome({ skillTome: false }, 0, () => 0), false);
   assert.equal(R.rollSkillTome({ skillTome: true }, 1, () => 0), false);
-  assert.equal(R.rollSkillTome({ skillTome: false }, 1, () => .05), false);
-  assert.equal(R.rollSkillTome({ skillTome: false }, 1, () => .049999), true);
+  assert.equal(R.rollSkillTome({ skillTome: false }, 1, () => .15), false);
+  assert.equal(R.rollSkillTome({ skillTome: false }, 1, () => .149999), true);
   const room = live(), [a, b] = room.players;
   room.nextSpawn = Infinity;
   room.floor = 1;
   room.floorKills = R.towerGoal;
   step(room);
   room.boss.hp = 0;
-  const rolls = [.049, .05];
+  const rolls = [.149, .15];
   room.random = () => rolls.shift() ?? .99;
   step(room);
   const tome = room.loot.find(item => item.kind === "tome");

@@ -984,7 +984,8 @@ function enterFloor(){
 function floorCleared(rewardXP=0){
   setMode('upgrade');
   const rewardText=rewardXP?'獲得 '+rewardXP+' XP。':'';
-  panel('超級龍王退散！',rewardText+'每層擊倒 1,000 隻敵人召喚塔王；守關魔王有 5% 機率掉落絕世寶典。',[
+  const tomePercent=Math.round(NezhaRules.skillTomeChance*100);
+  panel('超級龍王退散！',rewardText+'每層擊倒 1,000 隻敵人召喚塔王；守關魔王有 '+tomePercent+'% 機率掉落絕世寶典。',[
     ['進入無限塔第 1 層',enterFloor],['結束本局',()=>finish(true)]
   ],true);
 }
