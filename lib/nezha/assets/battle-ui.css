@@ -75,16 +75,19 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 html.lobby :is(.hud,.wave,.bossbar,#xp,.skills,#gear,.hint){display:none!important}
 html.lobby .overlay{grid-template-rows:minmax(0,1fr)}
 .card.lobby-hub{width:min(650px,100%);height:min(550px,100%);display:flex;flex-direction:column;text-align:left}
-.card.lobby-hub:has(.lobby-billboard-view){height:min(650px,100%)}
+.card.lobby-hub:has(.lobby-billboard-view){width:min(740px,100%);height:min(750px,100%)}
 .lobby-panels.is-billboard.with-party{display:flex}
 .is-billboard .lobby-social-rail{display:none}
-.lobby-view.lobby-billboard-view{margin-bottom:0;padding:2px 3px 6px}
+.lobby-view.lobby-billboard-view{margin-bottom:0;padding:2px 3px 6px;container-type:size}
 .billboard-bar,.billboard-controls{display:flex;align-items:center;gap:5px}
-.billboard-bar{justify-content:space-between;flex-wrap:wrap;margin-bottom:8px}
+.billboard-bar{position:sticky;top:0;z-index:1;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px;background:#21343b}
 .lobby-billboard-view .billboard-bar h2{font-size:18px;margin:0;color:var(--gold)}
 .billboard-controls{flex:none}.billboard-controls button{width:30px;height:32px;padding:0;box-shadow:none;font-size:16px}
 .billboard-count{min-width:46px;text-align:center;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-.billboard-link{display:block;border:1px solid #ad8d5e;border-radius:4px;background:#152931;color:var(--ink);text-decoration:none;overflow:hidden;touch-action:pan-y}
+.billboard-link{display:block;width:100%;margin-inline:auto;border:1px solid #ad8d5e;border-radius:4px;background:#152931;color:var(--ink);text-decoration:none;overflow:hidden;touch-action:pan-y}
+@supports (width:1cqh){
+  .billboard-link{width:min(100%,max(260px,calc((100cqh - 92px) * 1140 / 820)))}
+}
 .billboard-link:hover,.billboard-link:focus-visible{background:#29434a;border-color:var(--gold)}
 .billboard-link img{display:block;width:100%;height:auto;aspect-ratio:1140/820;object-fit:contain;background:#101f26}
 .billboard-copy{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;min-height:44px;padding:7px 10px;overflow-wrap:anywhere}.billboard-copy span{font-size:12px;color:var(--gold)}
