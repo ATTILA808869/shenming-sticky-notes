@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { GameError } from "@/lib/nezha/session";
 
 const maxImageBytes = 2 * 1024 * 1024;
-const bannerWidth = 1140, bannerHeight = 820;
+const maxBannerWidth = 1140, maxBannerHeight = 820;
+const bannerSizeHint = `寬度不可超過 ${maxBannerWidth} px，高度不可超過 ${maxBannerHeight} px。`;
 export const billboardBodyLimit = Math.ceil(maxImageBytes / 3) * 4 + 8192;
 const validId = /^[a-zA-Z0-9-]{1,48}$/;
 const select = { id: true, title: true, kind: true, targetUrl: true, sortOrder: true, published: true, assetPath: true, imageType: true, updatedAt: true } as const;
@@ -47,10 +48,11 @@ async function billboardImage(value: unknown) {
   if (image.length >= 16 && image.subarray(0, 3).equals(Buffer.from("ffd8ff", "hex"))) imageType = "image/jpeg";
   if (image.length >= 16 && image.toString("ascii", 0, 4) === "RIFF" && image.toString("ascii", 8, 12) === "WEBP") imageType = "image/webp";
   if (!imageType) throw new GameError(400, "請上傳 PNG、JPG 或 WebP 圖片。");
-  const metadata = await sharp(image, { limitInputPixels: bannerWidth * bannerHeight }).metadata().catch(() => null);
-  if (!metadata) throw new GameError(400, `無法讀取圖片，請確認格式與尺寸（${bannerWidth} × ${bannerHeight} px）。`);
-  if (metadata.width !== bannerWidth || metadata.height !== bannerHeight || (metadata.orientation ?? 1) >= 5) {
-    throw new GameError(400, `橫幅圖片須為 ${bannerWidth} × ${bannerHeight} px。`);
+  const metadata = await sharp(image, { limitInputPixels: maxBannerWidth * maxBannerHeight }).metadata().catch(() => null);
+  if (!metadata) throw new GameError(400, `無法讀取圖片，請確認格式與尺寸。${bannerSizeHint}`);
+  const { width, height } = metadata.autoOrient;
+  if (!width || !height || width > maxBannerWidth || height > maxBannerHeight) {
+    throw new GameError(400, bannerSizeHint);
   }
   return { image: new Uint8Array(image), imageType, assetPath: null };
 }

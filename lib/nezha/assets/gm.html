@@ -67,8 +67,8 @@ dialog::backdrop{background:#091417b8}dialog h2{margin:0 0 5px}dialog label{disp
       <label>排序（小到大）<input id="banner-order" type="number" min="0" max="999" required></label>
     </div>
     <label>點擊連結（HTTPS）<input id="banner-url" type="url" required maxlength="1024"></label>
-    <label>橫幅圖片（1140 × 820 px，2 MB 內）<input id="banner-file" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="banner-formats"></label>
-    <small id="banner-formats">支援 PNG、JPG、WebP。</small>
+    <label>橫幅圖片<input id="banner-file" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="banner-formats"></label>
+    <small id="banner-formats">寬 1140 px、高 820 px 以內，檔案不超過 2 MB。支援 PNG、JPG、WebP，不限比例。</small>
     <img id="banner-current" class="banner-preview" alt="目前的橫幅" hidden>
     <p id="banner-status" role="status"></p>
     <div class="controls"><button type="button" id="banner-cancel">取消</button><button type="submit" id="banner-save" class="primary">儲存</button></div>
