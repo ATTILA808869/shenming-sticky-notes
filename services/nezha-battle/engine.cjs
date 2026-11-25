@@ -159,7 +159,7 @@ function spawnMob(room, p, balance, wave, kind, mini = false, angle) {
 function spawnBoss(room, p) {
   const balance = combatBalance(room);
   const strength = strengths(room, balance), floor = Math.min(room.floor, R.towerBaselineFloor);
-  const guardian = room.floor ? R.towerGuardians[(room.floor - 1) % R.towerGuardians.length] : R.bossStages[room.nextBoss++];
+  const guardian = room.floor ? R.towerGuardian(room.floor) : R.bossStages[room.nextBoss++];
   const guardianTime = room.baseline ? 0 : room.floorTime;
   const hp = R.bossHealth(room.floor ? 1100 + floor * 340 + guardianTime * 1.25 : guardian.hp, balance, floor, strength.health * 1.35);
   const attack = (room.floor ? 43 + floor * 7 + guardianTime * .04 : guardian.attack) * strength.attack;
@@ -315,7 +315,7 @@ function towerSpecial(room, boss, living) {
   if (lane.pattern === "qi") {
     room.bolts.push(...R.fireTowerQi(lane));
     room.sparks.push({ x: lane.x, y: lane.y, r: 43, life: .32, kind: "boss-area", pattern: "qi" });
-    boss.special = null;
+    boss.special = null; boss.strikeAt = room.time;
     return;
   }
   lane.phase = "dash";
@@ -330,13 +330,14 @@ function towerSpecial(room, boss, living) {
     room.sparks.push({ x: step.fromX, y: step.fromY, r: boss.r, angle: lane.angle, life: .24, kind: "boss-dash" });
     lane.trailAt = room.time + .06;
   }
-  if (step.done) boss.special = null;
+  if (step.done) { boss.special = null; boss.strikeAt = room.time; }
 }
 function enemyCasts(room, living, dt) {
   advanceBolts(room, living, dt);
   if (room.boss?.hp <= 0) room.warnings = [];
   room.warnings = room.warnings.filter(warning => {
     if (room.time < warning.until) return true;
+    if (room.boss?.towerSprite && warning.pattern) { room.boss.windupUntil = 0; room.boss.strikeAt = room.time; }
     for (const p of living) if (warning.marks.some(mark => gap(p, mark) < mark.r)) hurt(room, p, warning.damage);
     for (const mark of warning.marks) room.sparks.push({ ...mark, life: .32,
       kind: warning.pattern ? "boss-area" : "enemy-impact", pattern: warning.pattern });
@@ -357,7 +358,11 @@ function enemyCasts(room, living, dt) {
       if (room.floor) {
         const cast = R.towerCast(room.floor, e.cast++, e, p);
         const damage = enemyAttack(room, e) * cast.power;
-        if (cast.marks.length) area(room, cast.marks, cast.name, cast.duration, damage, cast.pattern);
+        e.castFacing = Math.sign(p.x - e.x) || e.facing;
+        if (cast.marks.length) {
+          e.windupUntil = room.time + cast.duration;
+          area(room, cast.marks, cast.name, cast.duration, damage, cast.pattern);
+        }
         else {
           e.special = { ...R.towerLane(cast, e, p, width, height, room.time, damage), hit: new Set() };
           e.facing = Math.cos(e.special.angle) < 0 ? -1 : 1;
@@ -683,6 +688,8 @@ function snapshot(room) {
       id: e.id, x: e.x, y: e.y, hp: Math.ceil(e.hp), maxHp: e.maxHp, radius: e.r, guardian: Boolean(e.guardian),
       name: e.name, kind: e.mini ? "mini" : e.kind, color: e.color, flash: e.flash > 0, phase: e.phase, facing: e.facing,
       ...(e.guardian ? { casting: Boolean(e.special) || e.castAt - room.time < .28, pressure: clamp((room.time - e.start - 25) / 50, 0, 1) } : {}),
+      ...(e.towerSprite ? { towerSprite: e.towerSprite, towerMotion: e.special?.phase, castFacing: e.castFacing,
+        windupUntil: e.windupUntil, strikeAt: e.strikeAt } : {}),
       ...(e.stun > 0 ? { stun: true } : {}), petrifiedUntil: e.petrifiedUntil, jigongSlowUntil: e.jigongSlowUntil, jigongWaterUntil: e.jigongWaterUntil,
       healFlashUntil: e.healFlashUntil, aim: e.aim ? { dx: e.aim.dx, dy: e.aim.dy, range: e.aim.profile.range + 24 + Math.min(12, e.r),
         ...(e.aim.profile.seal ? { seal: { x: e.aim.x, y: e.aim.y, r: e.aim.profile.radius } } : {}),

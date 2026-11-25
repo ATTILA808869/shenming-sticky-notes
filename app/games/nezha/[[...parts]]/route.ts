@@ -54,6 +54,10 @@ const assetTypes = {
   "skill-icon-fan.png": "image/png",
   "skill-icon-gourd.png": "image/png",
   "tower-tome.png": "image/png",
+  "tower-boss-qinglong.webp": "image/webp",
+  "tower-boss-zhuque.webp": "image/webp",
+  "tower-boss-baihu.webp": "image/webp",
+  "tower-boss-xuanwu.webp": "image/webp",
   "tower-sword.png": "image/png",
   "tower-bell.png": "image/png",
   "tower-hourglass.png": "image/png",
@@ -220,6 +224,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       case "skill-icon-fan.png":
       case "skill-icon-gourd.png":
       case "tower-tome.png":
+      case "tower-boss-qinglong.webp":
+      case "tower-boss-zhuque.webp":
+      case "tower-boss-baihu.webp":
+      case "tower-boss-xuanwu.webp":
       case "tower-sword.png":
       case "tower-bell.png":
       case "tower-hourglass.png":

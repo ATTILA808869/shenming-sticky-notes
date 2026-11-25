@@ -90,9 +90,9 @@ const mapHeight = 2160;
 const {wheelOrbitRadius,wheelHitRadius,wheelEvolutionScale,wheelKnockbackCooldown,
   bossStages,normalSkillLimit,baseStats,miniTypes,rangedAttacks,patterns,jigongSpecs,skillNames,
   ringExplosionLife,wheelCooldown,jigongWindRadius,
-  attackGainPerLevel,defenseGainPerLevel,milestoneLevels}=NezhaRules;
+  attackGainPerLevel,defenseGainPerLevel,milestoneLevels,milestoneStatFactor}=NezhaRules;
 const {radius:pickupRadius,bombKillLimit,bombFlashTime,magnetFlightTime,magnetPulseTime,maxMagnetFlights}=NezhaRules.loot;
-const {towerBaselineFloor,towerHealthBoost,towerDamageBoost,towerGuardians,storyWaves}=NezhaRules;
+const {towerBaselineFloor,towerHealthBoost,towerDamageBoost,towerGuardian,storyWaves}=NezhaRules;
 const storyMobLimit=80;
 const projectilePlayerRadius=12;
 const towerStartLevel=50,towerStartUpgrades=50,towerStartRewards=25;
@@ -487,7 +487,7 @@ function showUpgrades(resume=()=>setMode('play'),setupChoice=0){
     label,learn!==undefined?()=>chooseSkill(learn,resume):apply?()=>{apply();resume();}:null
   ]);
   setMode('upgrade');
-  const milestone=player.level%milestoneLevels===0?'總攻擊力與總防禦力再＋5%。':'';
+  const milestone=player.level%milestoneLevels===0?'總攻擊力與總防禦力再＋'+Math.round((milestoneStatFactor-1)*100)+'%。':'';
   const title=setupChoice?'塔起點・升級配點 '+setupChoice+' / '+towerStartUpgrades:'升到 '+player.level+' 級';
   const detail=setupChoice?'起始等級 '+towerStartLevel+'・選擇一項強化。':'攻擊力＋'+attackGainPerLevel+'、防禦力＋'+defenseGainPerLevel+'。'+milestone;
   const actions=panel(title,detail,options);
@@ -978,6 +978,7 @@ function startBoss(){
 }
 function enterFloor(){
   towerFloor++;floorKills=0;floorMiniKills=0;floorTime=0;spawn=.65;nextTowerMiniAt=elapsed+.8;
+  combatArt.prepareTowerBoss(towerGuardian(towerFloor).towerSprite);
   towerBreak=null;
   // Keep the high-floor baseline fixed so scaling does not also track run time.
   if(towerFloor===towerBaselineFloor)towerBaseline=currentEnemyBalance();
@@ -1015,7 +1016,7 @@ function towerLootTick(dt){
   enterFloor();
 }
 function spawnTowerGuardian(){
-  const guardian=towerGuardians[(towerFloor-1)%towerGuardians.length];
+  const guardian=towerGuardian(towerFloor);
   const direction=player.x<mapWidth/2?1:-1;
   const balance=enemyBalance();
   const floor=baseTowerFloor();
@@ -1023,7 +1024,7 @@ function spawnTowerGuardian(){
   const hp=scaledBossHealth(1100+floor*340+guardianTime*1.25,balance);
   boss={...guardian,name:'第 '+towerFloor+' 層・'+guardian.name,hp,maxHp:hp,
     attack:scaledEnemyAttack(43+floor*7+guardianTime*.04,balance),speed:(guardian.speed+floor*2)*NezhaRules.towerMoveFactor(towerFloor),
-    r:49,x:player.x+direction*145,y:player.y,stun:0,flash:0,cast:2,patternIndex:0,startedAt:elapsed};
+    r:49,x:player.x+direction*145,y:player.y,facing:-direction,stun:0,flash:0,cast:2,patternIndex:0,startedAt:elapsed};
 }
 function bossPressure(){
   return clamp((elapsed-boss.startedAt-25)/50,0,1);
@@ -1103,7 +1104,7 @@ function updateTowerSpecial(fromX,fromY){
   if(lane.pattern==='qi'){
     for(const shot of NezhaRules.fireTowerQi(lane))enemyShots.push({...shot,source:boss.name+'・'+lane.name});
     sparks.push({x:lane.x,y:lane.y,r:43,life:.32,kind:'boss-area',pattern:'qi'});
-    boss.special=null;
+    boss.special=null;boss.strikeAt=elapsed;
     return;
   }
   lane.phase='dash';
@@ -1115,7 +1116,7 @@ function updateTowerSpecial(fromX,fromY){
     sparks.push({x:step.fromX,y:step.fromY,r:boss.r,angle:lane.angle,life:.24,kind:'boss-dash'});
     lane.trailAt=elapsed+.06;
   }
-  if(step.done)boss.special=null;
+  if(step.done){boss.special=null;boss.strikeAt=elapsed;}
 }
 function updateEnemyRanged(dt,fromX,fromY){
   advanceEnemyShots(dt,fromX,fromY);
@@ -1366,7 +1367,9 @@ function update(dt){
       boss.cast=boss.interval*(1-.25*bossPressure());
       if(towerFloor){
         const attack=NezhaRules.towerCast(towerFloor,boss.patternIndex++,boss,player);
+        boss.castFacing=Math.sign(player.x-boss.x)||boss.facing;
         if(attack.marks.length){
+          boss.windupUntil=elapsed+attack.duration;
           for(const mark of attack.marks)warnings.push({...mark,life:attack.duration,duration:attack.duration,pattern:attack.pattern,
             name:attack.name,castId:boss.patternIndex,damage:enemyAttack(boss)*attack.power,source:boss.name+'・'+attack.name});
         }else{
@@ -1389,6 +1392,7 @@ function update(dt){
   warnings=warnings.filter(mark=>{
     mark.life-=dt;
     if(mark.life>0)return true;
+    if(boss?.towerSprite&&mark.pattern){boss.windupUntil=0;boss.strikeAt=elapsed;}
     if(distance(mark,player)<mark.r&&(!mark.castId||!hitCasts.has(mark.castId))){
       hurt(mark.damage,mark.source);
       if(mark.castId)hitCasts.add(mark.castId);

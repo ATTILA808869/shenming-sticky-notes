@@ -181,6 +181,37 @@ test("mini reward provides only four gears; solo rules still enforce health and 
   assert.equal(R.levelCost(50, true), R.levelCost(80, true));
 });
 
+test("sword and armor raise their per-pick bonuses at each independent fifteen-rank threshold", () => {
+  const p = R.createCharacter("nezha");
+  for (const [rank, sword, armor] of [[1, 4, 9], [14, 4, 9], [15, 6, 14], [29, 6, 14], [30, 8, 19], [45, 10, 24]]) {
+    p.gear[3] = p.gear[1] = rank - 1;
+    const attack = p.attack, defense = p.defense;
+    const picks = R.gearChoices(p);
+    assert.equal(picks[0].label, "神刀 Lv." + rank + "・攻擊力＋" + sword);
+    assert.equal(picks[2].label, "神甲 Lv." + rank + "・防禦力＋" + armor);
+    picks[0].apply(); picks[2].apply();
+    assert.deepEqual([p.gear[3], p.gear[1], p.attack - attack, p.defense - defense], [rank, rank, sword, armor]);
+  }
+  const room = live(), [a, b] = room.players;
+  a.gear[3] = 14; b.gear[1] = 29; a.gearRewards = b.gearRewards = 1;
+  step(room);
+  assert.equal(chooseReward(room, a.id, pendingReward(a).id, 0), true);
+  assert.equal(chooseReward(room, b.id, pendingReward(b).id, 2), true);
+  assert.equal(a.attack, 31);
+  assert.equal(b.defense, 44);
+});
+
+test("every tenth character level multiplies total attack and defense by 1.10 after normal gains", () => {
+  const p = R.createCharacter("nezha");
+  R.gearChoices(p)[0].apply(); R.gearChoices(p)[2].apply();
+  while (p.level < 9) R.gainLevel(p);
+  assert.deepEqual([p.attack, p.defense], [45, 42]);
+  R.gainLevel(p);
+  assert.deepEqual([p.attack.toFixed(2), p.defense.toFixed(2)], ["51.70", "47.30"]);
+  while (p.level < 20) R.gainLevel(p);
+  assert.deepEqual([p.attack.toFixed(2), p.defense.toFixed(2)], ["78.87", "63.03"]);
+});
+
 test("rescue progresses only with a connected nearby teammate and restores 30% of max HP", () => {
   const room = live(), [a, b] = room.players;
   a.hp = 0; a.maxHp = 200; a.gearRewards = 1; room.nextSpawn = Infinity;
@@ -222,6 +253,21 @@ test("tower bosses cycle six telegraphed attacks without overlapping-cast damage
   assert.equal(b.hp, 100);
 });
 
+test("tower guardians repeat the four beast models without changing floor-by-floor move and cast pacing", () => {
+  const sprites = ["qinglong", "zhuque", "baihu", "xuanwu"];
+  const names = ["魔化青龍", "魔化朱雀", "魔化白虎", "魔化玄武"];
+  for (let floor = 1; floor <= 8; floor++) {
+    const room = live(), beast = (floor - 1) % sprites.length;
+    room.floor = floor; room.floorKills = R.towerObjective(floor).goal;
+    step(room);
+    const guardian = snapshot(room).enemies.find(enemy => enemy.guardian);
+    assert.equal(guardian.towerSprite, sprites[beast]);
+    assert.equal(guardian.name, "第 " + floor + " 層・" + names[beast]);
+    assert.equal(room.boss.interval, [2.65, 2.5, 2.85][(floor - 1) % 3]);
+    assert.equal(room.boss.speed, ([95, 114, 83][(floor - 1) % 3] + Math.min(floor, R.towerBaselineFloor) * 2) * R.towerMoveFactor(floor));
+  }
+});
+
 function bossFixture(pattern) {
   const room = live(), [a, b] = room.players;
   room.floor = 1; room.floorKills = R.towerGoal;
@@ -235,6 +281,23 @@ function bossFixture(pattern) {
   b.y = 1350;
   return { room, a, b, boss };
 }
+test("tower area attacks expose charge, strike, recovery and hit phases to both clients", () => {
+  const { room, boss } = bossFixture("meteor");
+  const pose = () => R.towerGuardianPose(snapshot(room).enemies.find(enemy => enemy.guardian), room.time);
+  assert.equal(pose(), 1);
+  assert.equal(snapshot(room).enemies.find(enemy => enemy.guardian).castFacing, 1);
+  step(room, 32);
+  assert.equal(pose(), 2);
+  step(room, 4);
+  assert.equal(pose(), 3);
+  boss.flash = .15;
+  assert.equal(pose(), 4);
+  boss.petrifiedUntil = room.time + .12;
+  assert.equal(pose(), 0);
+  step(room, 5);
+  assert.equal(pose(), 0);
+});
+
 test("dash warns along a fixed lane, hits at most once, and can be dodged", () => {
   const { room, a, b, boss } = bossFixture("dash");
   const lane = snapshot(room).bossLane;
@@ -243,7 +306,10 @@ test("dash warns along a fixed lane, hits at most once, and can be dodged", () =
   step(room, 18);
   assert.equal(boss.x, lane.x);
   assert.equal(a.hp, 100);
-  step(room, 14);
+  assert.equal(R.towerGuardianPose(boss, room.time), 1);
+  step(room, 8);
+  assert.equal(R.towerGuardianPose(boss, room.time), 2);
+  step(room, 6);
   assert.equal(a.hp, 100 - R.hitValue(boss.attack * 1.10, a.defense));
   assert.equal(b.hp, 100);
   for (let i = 0; boss.special && i < 4; i++) step(room);
