@@ -1013,14 +1013,14 @@ function towerLootTick(dt){
 }
 function spawnTowerGuardian(){
   const guardian=towerGuardian(towerFloor);
-  const direction=player.x<mapWidth/2?1:-1;
+  const spawnPoint=NezhaRules.towerGuardianSpawn(mapWidth,mapHeight,[player]);
   const balance=enemyBalance();
   const floor=baseTowerFloor();
   const guardianTime=towerBaseline?0:floorTime;
   const hp=scaledBossHealth(1100+floor*340+guardianTime*1.25,balance);
   boss={...guardian,name:'第 '+towerFloor+' 層・'+guardian.name,hp,maxHp:hp,
     attack:scaledEnemyAttack(43+floor*7+guardianTime*.04,balance),speed:(guardian.speed+floor*2)*NezhaRules.towerMoveFactor(towerFloor),
-    r:49,x:player.x+direction*145,y:player.y,facing:-direction,stun:0,flash:0,cast:2,patternIndex:0,startedAt:elapsed};
+    ...spawnPoint,r:49,facing:Math.sign(player.x-spawnPoint.x)||1,stun:0,flash:0,cast:2,patternIndex:0,startedAt:elapsed};
 }
 function bossPressure(){
   return clamp((elapsed-boss.startedAt-25)/50,0,1);
@@ -1661,7 +1661,7 @@ function frame(now){
     lastHudAt=now;
     const requiredXP=needed();
     hud.render({player,time,floor:towerFloor,floorKills,floorMiniKills,waveIndex:nextWave,
-      boss:boss?{name:boss.name,hp:boss.hp,maxHp:boss.maxHp,pressure:bossPressure()}:null,
+      boss:boss?{name:boss.name,x:boss.x,y:boss.y,hp:boss.hp,maxHp:boss.maxHp,pressure:bossPressure()}:null,
       bossCast:boss?.special?.name??warnings.find(mark=>mark.name)?.name,
       kills,needed:requiredXP,ready:mode==='play'&&player.xp>=requiredXP?availableLevels():0});
   }

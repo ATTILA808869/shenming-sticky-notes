@@ -156,14 +156,18 @@ function spawnMob(room, p, balance, wave, kind, mini = false, angle) {
     contact: new Map(), wheels: new Map(), rangedReadyAt: room.time + 1.4 + room.random() * 2.2,
     abilityAt: room.time + 2 + room.random() * 3 });
 }
-function spawnBoss(room, p) {
+function spawnBoss(room, living) {
   const balance = combatBalance(room);
   const strength = strengths(room, balance), floor = Math.min(room.floor, R.towerBaselineFloor);
   const guardian = room.floor ? R.towerGuardian(room.floor) : R.bossStages[room.nextBoss++];
   const guardianTime = room.baseline ? 0 : room.floorTime;
   const hp = R.bossHealth(room.floor ? 1100 + floor * 340 + guardianTime * 1.25 : guardian.hp, balance, floor, strength.health * 1.35);
   const attack = (room.floor ? 43 + floor * 7 + guardianTime * .04 : guardian.attack) * strength.attack;
-  room.boss = { ...guardian, ...origin(room, p, 207), id: room.nextId++, guardian: true,
+  const spawn = room.floor ? R.towerGuardianSpawn(width, height, room.players.filter(p => !p.retired))
+    : origin(room, living[Math.floor(room.random() * living.length)], 207);
+  const facing = room.floor ? { facing: Math.sign(nearest(spawn, living).target.x - spawn.x) || 1 } : {};
+  room.boss = { ...guardian, ...spawn, id: room.nextId++, guardian: true,
+    ...facing,
     kind: room.floor || guardian.at === R.storyDuration ? "dragon" : "boss",
     r: room.floor ? 49 : guardian.r, speed: (guardian.speed + floor * 2) * R.towerMoveFactor(room.floor), hp, maxHp: hp, attack,
     name: room.floor ? "第 " + room.floor + " 層・" + guardian.name : guardian.name,
@@ -175,7 +179,7 @@ function spawns(room, living) {
   const objective = R.towerObjective(room.floor);
   if (room.floor ? (objective.mini ? room.floorMiniKills : room.floorKills) >= objective.goal
     : R.bossStages[room.nextBoss]?.at <= room.storyTime + 1e-8) {
-    spawnBoss(room, living[Math.floor(room.random() * living.length)]); return;
+    spawnBoss(room, living); return;
   }
   const crowd = room.floor ? R.towerCrowd(room.floor, room.floorTime, true) : null;
   const cap = crowd?.cap ?? 105;

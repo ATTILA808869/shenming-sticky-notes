@@ -281,6 +281,23 @@ test("tower guardians repeat the four beast models without changing floor-by-flo
   }
 });
 
+test("tower guardians enter at the north edge, choosing a safe lane even when both players occupy spawn points", () => {
+  assert.deepEqual(R.towerGuardianSpawn(2880, 2160, [{ x: 80, y: 1100 }]), { x: 1440, y: 146 });
+  for (const downed of [false, true]) {
+    const room = live(), [a, b] = room.players;
+    Object.assign(a, { x: 1440, y: 146, hp: 1 });
+    Object.assign(b, { x: 1008, y: 146, hp: downed ? 0 : 1 });
+    room.floor = 20; room.floorMiniKills = R.towerObjective(20).goal;
+    const spawn = R.towerGuardianSpawn(2880, 2160, room.players);
+    assert.deepEqual(spawn, { x: 1872, y: 146 });
+    step(room);
+    assert.ok(Math.abs(room.boss.x - spawn.x) <= room.boss.speed * .05);
+    assert.equal(room.boss.y, spawn.y);
+    assert.ok(room.players.every(p => Math.hypot(p.x - room.boss.x, p.y - room.boss.y) > 360));
+    assert.deepEqual(room.players.map(p => p.hp), [1, downed ? 0 : 1]);
+  }
+});
+
 function bossFixture(pattern) {
   const room = live(), [a, b] = room.players;
   room.floor = 1; room.floorKills = R.towerGoal;
