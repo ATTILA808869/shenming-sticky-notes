@@ -92,11 +92,11 @@ const {wheelOrbitRadius,wheelHitRadius,wheelEvolutionScale,wheelKnockbackCooldow
   ringExplosionLife,wheelCooldown,jigongWindRadius,
   attackGainPerLevel,defenseGainPerLevel,milestoneLevels}=NezhaRules;
 const {radius:pickupRadius,bombKillLimit,bombFlashTime,magnetFlightTime,magnetPulseTime,maxMagnetFlights}=NezhaRules.loot;
-const {towerBaselineFloor,towerFloorGrowth,towerHealthBoost,towerDamageBoost,towerGuardians,towerGoal,storyWaves}=NezhaRules;
+const {towerBaselineFloor,towerHealthBoost,towerDamageBoost,towerGuardians,storyWaves}=NezhaRules;
 const storyMobLimit=80;
 const projectilePlayerRadius=12;
 const towerStartLevel=50,towerStartUpgrades=50,towerStartRewards=25;
-let towerFloor, floorKills, floorTime, towerTime, clearedFloors, towerBaseline, towerBreak;
+let towerFloor, floorKills, floorMiniKills, nextTowerMiniAt, floorTime, towerTime, clearedFloors, towerBaseline, towerBreak;
 let optionButtons=[];
 const miniBossChance=.30;
 let nextWave, waveSlots, miniBossKills, miniBossThreshold, gearRewards, nextRewardAt;
@@ -155,7 +155,7 @@ function reset(){
   magnetEffect=null;
   unlockToastUntil=0;
   time=0; elapsed=0; spawn=.35; kills=0; boss=null; nextBoss=0;
-  towerFloor=0;clearedFloors=0;floorKills=0;floorTime=0;towerTime=0;
+  towerFloor=0;clearedFloors=0;floorKills=0;floorMiniKills=0;floorTime=0;towerTime=0;
   towerBaseline=null;
   towerBreak=null;
   nextWave=0;waveSlots=0;miniBossKills=0;miniBossThreshold=50;gearRewards=0;nextRewardAt=0;
@@ -365,7 +365,8 @@ function currentEnemyBalance(){
 }
 const enemyBalance=()=>towerBaseline??currentEnemyBalance();
 const baseTowerFloor=()=>Math.min(towerFloor,towerBaselineFloor);
-const towerStrength=()=>towerFloorGrowth**Math.max(0,towerFloor-towerBaselineFloor);
+const towerStrength=()=>NezhaRules.towerStrength(towerFloor);
+const towerProgress=()=>NezhaRules.towerObjective(towerFloor).mini?floorMiniKills:floorKills;
 const enemyHealthStrength=()=>towerStrength()*(towerFloor?towerHealthBoost:1);
 function scaledEnemyAttack(attack,balance){
   return attack*balance.durability*towerStrength()*(towerFloor?towerDamageBoost:1);
@@ -379,10 +380,11 @@ function chooseMobKind(){
 }
 function addMob(wave=false,kind=chooseMobKind(),angle=Math.random()*Math.PI*2){
   const balance=enemyBalance();
+  const stats=NezhaRules.mobStats(kind,balance,wave,enemyHealthStrength(),scaledEnemyAttack(1,balance));
   const radius=clamp(Math.min(width,height)*.6+85,270,470)+Math.random()*(wave?220:80);
   mobs.push({x:clamp(player.x+Math.cos(angle)*radius,15,mapWidth-15),
     y:clamp(player.y+Math.sin(angle)*radius,15,mapHeight-15),
-    ...NezhaRules.mobStats(kind,balance,wave,enemyHealthStrength(),scaledEnemyAttack(1,balance)),
+    ...stats,speed:stats.speed*NezhaRules.towerMoveFactor(towerFloor),
     flash:0,stun:0,phase:Math.random()*6,abilityAt:elapsed+2+Math.random()*3,
     rangedReadyAt:elapsed+1.4+Math.random()*2.2});
 }
@@ -412,10 +414,16 @@ function updateWave(){
 }
 function updateSpawns(dt){
   if(boss||(!towerFloor&&updateWave()))return;
+  if(towerFloor>=NezhaRules.miniTowerFloor&&elapsed>=nextTowerMiniAt){
+    const count=NezhaRules.towerMiniWave(towerFloor,floorMiniKills,mobs.filter(mob=>mob.mini&&mob.hp>0).length);
+    for(let i=0;i<count;i++)addMiniBoss();
+    nextTowerMiniAt=elapsed+NezhaRules.towerMiniInterval;
+  }
   spawn-=dt;
   if(spawn>0)return;
-  const batch=towerFloor?Math.min(20,12+towerFloor+Math.floor(floorTime/70)):1+Math.floor(time/120);
-  const limit=towerFloor?230:storyMobLimit;
+  const crowd=towerFloor?NezhaRules.towerCrowd(towerFloor,floorTime):null;
+  const batch=crowd?.batch??1+Math.floor(time/120);
+  const limit=crowd?.cap??storyMobLimit;
   for(let i=0;i<batch&&mobs.length<limit;i++)addMob(Boolean(towerFloor));
   spawn=towerFloor?.66:Math.max(.65,1.55-time*.0015-Math.max(0,time-300)*.001);
 }
@@ -423,7 +431,8 @@ function addMiniBoss(){
   const balance=enemyBalance();
   const type=miniTypes[Math.floor(Math.random()*miniTypes.length)];
   const angle=Math.random()*2*Math.PI;
-  mobs.push({...NezhaRules.miniStats(type,balance,enemyHealthStrength(),scaledEnemyAttack(1,balance)),
+  const stats=NezhaRules.miniStats(type,balance,enemyHealthStrength(),scaledEnemyAttack(1,balance));
+  mobs.push({...stats,speed:stats.speed*NezhaRules.towerMoveFactor(towerFloor),
     x:clamp(player.x+Math.cos(angle)*185,25,mapWidth-25),
     y:clamp(player.y+Math.sin(angle)*185,25,mapHeight-25),
     flash:0,stun:0,phase:Math.random()*6,rangedReadyAt:elapsed+1+Math.random()*1.2});
@@ -930,7 +939,7 @@ function showLeaderboard(back){
   void loadLeaderboard(content);
 }
 function currentScore(){
-  const progress=towerFloor>clearedFloors?Math.min(floorKills,towerGoal):0;
+  const progress=towerFloor>clearedFloors?Math.min(towerProgress(),NezhaRules.towerObjective(towerFloor).goal):0;
   return {cleared:clearedFloors,progress,kills};
 }
 const scoreSavedText=result=>result.updated?'已更新個人最高樓層與排行榜。':'已保留原有的最佳排行榜紀錄。';
@@ -968,9 +977,9 @@ function startBoss(){
     stun:0,flash:0,cast:2,startedAt:elapsed};
 }
 function enterFloor(){
-  towerFloor++;floorKills=0;floorTime=0;spawn=.65;
+  towerFloor++;floorKills=0;floorMiniKills=0;floorTime=0;spawn=.65;nextTowerMiniAt=elapsed+.8;
   towerBreak=null;
-  // Share one stat baseline so the 15% multiplier is the only growth from floor 5.
+  // Keep the high-floor baseline fixed so scaling does not also track run time.
   if(towerFloor===towerBaselineFloor)towerBaseline=currentEnemyBalance();
   boss=null;mobs=[];stars=[];drops=[];warnings=[];sparks=[];skillCombat.reset();
   enemyShots=[];nextEnemyAimAt=elapsed;
@@ -984,24 +993,23 @@ function enterFloor(){
 function floorCleared(rewardXP=0){
   setMode('upgrade');
   const rewardText=rewardXP?'獲得 '+rewardXP+' XP。':'';
-  const tomePercent=Math.round(NezhaRules.skillTomeChance*100);
-  panel('超級龍王退散！',rewardText+'每層擊倒 1,000 隻敵人召喚塔王；守關魔王有 '+tomePercent+'% 機率掉落絕世寶典。',[
+  panel('超級龍王退散！',rewardText+'第 1 層擊倒 1,000 隻怪物召喚塔王，每層多 50 隻。第 20 層起改為擊倒 100 隻小魔王，每層多 1 隻。',[
     ['進入無限塔第 1 層',enterFloor],['結束本局',()=>finish(true)]
   ],true);
 }
 function startTowerLoot(guardian){
   clearedFloors=towerFloor;
-  if(NezhaRules.rollSkillTome(player,towerFloor))drops.push({
-    x:clamp(guardian.x,36,mapWidth-36),y:clamp(guardian.y,46,mapHeight-36),kind:'tome'
-  });
+  for(const item of NezhaRules.towerRelicDrops([player],towerFloor,guardian,mapWidth,mapHeight))drops.push(item);
   dropItem(guardian);
   towerBreak={until:elapsed+NezhaRules.towerLootSeconds};
   mobs=[];boss=null;warnings=[];enemyShots=[];skillCombat.reset();
 }
+const towerLootDisplay=()=>NezhaRules.towerLootState(towerBreak.until-elapsed,drops.some(item=>item.kind==='tome'),
+  drops.some(item=>item.kind!=='tome'&&NezhaRules.isTowerRelic(item.kind)));
 function towerLootTick(dt){
   updateMagnet();
   collectLoot(dt);
-  if(NezhaRules.towerLootState(towerBreak.until-elapsed,drops.some(item=>item.kind==='tome')))return;
+  if(towerLootDisplay())return;
   updateMagnet(true);
   nextRewardAt=Math.max(nextRewardAt,elapsed+rewardInterval);
   enterFloor();
@@ -1014,7 +1022,7 @@ function spawnTowerGuardian(){
   const guardianTime=towerBaseline?0:floorTime;
   const hp=scaledBossHealth(1100+floor*340+guardianTime*1.25,balance);
   boss={...guardian,name:'第 '+towerFloor+' 層・'+guardian.name,hp,maxHp:hp,
-    attack:scaledEnemyAttack(43+floor*7+guardianTime*.04,balance),speed:guardian.speed+floor*2,
+    attack:scaledEnemyAttack(43+floor*7+guardianTime*.04,balance),speed:(guardian.speed+floor*2)*NezhaRules.towerMoveFactor(towerFloor),
     r:49,x:player.x+direction*145,y:player.y,stun:0,flash:0,cast:2,patternIndex:0,startedAt:elapsed};
 }
 function bossPressure(){
@@ -1024,7 +1032,7 @@ function enemyAttack(enemy){
   return enemy===boss?enemy.attack*(1+.20*bossPressure()):enemy.attack;
 }
 function hurt(value,source){
-  if(player.hp<=0)return;
+  if(player.hp<=0||NezhaRules.relicShield(player))return;
   player.hp=Math.max(0,player.hp-NezhaRules.hitValue(value,player.defense));
   if(player.hp===0)player.deathCause=source;
 }
@@ -1087,7 +1095,7 @@ function advanceEnemyShots(dt,fromX,fromY){
 function updateTowerSpecial(fromX,fromY){
   const lane=boss?.special;
   if(!lane)return;
-  if(boss.hp<=0||boss.stun>0||boss.knockedBackAt===elapsed){
+  if(boss.hp<=0||boss.stun>0||boss.knockedBackAt===elapsed||NezhaRules.isPetrified(boss,elapsed)){
     boss.special=null;
     return;
   }
@@ -1114,7 +1122,7 @@ function updateEnemyRanged(dt,fromX,fromY){
   let active=enemyShots.length;
   let candidate=null,profile=null,oldest=Infinity;
   for(const enemy of mobs){
-    if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed){
+    if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed||NezhaRules.isPetrified(enemy,elapsed)){
       if(enemy.aim){enemy.aim=null;enemy.rangedReadyAt=elapsed+.85;}
       continue;
     }
@@ -1151,7 +1159,7 @@ function attract(item,dt,radius,speed){
 }
 function activateMagnet(){
   const flights=[];
-  const normalDrops=drops.filter(drop=>drop.kind!=='tome');
+  const normalDrops=drops.filter(drop=>!NezhaRules.isTowerRelic(drop.kind));
   const stride=Math.max(1,Math.ceil((stars.length+normalDrops.length)/maxMagnetFlights));
   let index=0,visualTime=magnetPulseTime,bombCount=0,bombArrival=0;
   function launch(item,kind){
@@ -1168,7 +1176,7 @@ function activateMagnet(){
   }
   for(const star of stars){launch(star,'xp');player.xp+=star.value;}
   for(const drop of normalDrops){launch(drop,drop.kind);if(drop.kind==='heal')heal(NezhaRules.loot.healFraction);}
-  stars=[];drops=drops.filter(drop=>drop.kind==='tome');
+  stars=[];drops=drops.filter(drop=>NezhaRules.isTowerRelic(drop.kind));
   // Keep the reward window bounded even when multiple magnets are picked up in quick succession.
   const previous=magnetEffect;
   const bombBursts=previous?.bombBursts??[];
@@ -1205,10 +1213,10 @@ function updateMagnet(finish=false){
 function collectLoot(dt){
   let magnetCollected=false,bombs=0;
   drops=drops.filter(drop=>{
-    if(drop.kind==='tome'){
+    if(NezhaRules.isTowerRelic(drop.kind)){
       if(distance(drop,player)>NezhaRules.tomePickupRadius)return true;
-      player.skillTome=true;
-      sparks.push({x:drop.x,y:drop.y,life:1.4,r:32,kind:'tome'});
+      NezhaRules.grantRelic(player,drop.kind);
+      sparks.push({x:drop.x,y:drop.y,life:1.4,r:32,kind:'relic-pickup',relic:drop.kind});
       return false;
     }
     attract(drop,dt,pickupRadius,240);
@@ -1255,7 +1263,10 @@ function separateEnemies(enemies){
         const nx=gap>0?dx/gap:Math.cos(angle);
         const ny=gap>0?dy/gap:Math.sin(angle);
         const correction=(spacing-gap)*.8;
-        const share=enemy.special?0:other.special?1:other.r**2/(enemy.r**2+other.r**2);
+        const locked=enemy.special||NezhaRules.isPetrified(enemy,elapsed);
+        const otherLocked=other.special||NezhaRules.isPetrified(other,elapsed);
+        if(locked&&otherLocked)continue;
+        const share=locked?0:otherLocked?1:other.r**2/(enemy.r**2+other.r**2);
         enemy.x=clamp(enemy.x+nx*correction*share,15,mapWidth-15);
         enemy.y=clamp(enemy.y+ny*correction*share,15,mapHeight-15);
         other.x=clamp(other.x-nx*correction*(1-share),15,mapWidth-15);
@@ -1295,6 +1306,10 @@ function update(dt){
   }
   updateSpawns(dt);
   const enemies=boss?[...mobs,boss]:mobs;
+  NezhaRules.advanceRelics(player,dt,(kind,duration)=>{
+    if(kind==='stone')NezhaRules.petrifyEnemies(enemies,elapsed,duration);
+    sparks.push({x:player.x,y:player.y,life:.5,r:40,kind:'relic-'+kind});
+  });
   skillCombat.frame(player,elapsed,mapWidth,mapHeight,boss,sparks);
   skillCombat.updateSkills(dt,enemies);
   const wheelStart=player.wheelAngle,wheelSweep=player.wheelSpeed*dt;
@@ -1307,10 +1322,11 @@ function update(dt){
     if(enemy.hp<=0)continue;
     enemy.flash-=dt;enemy.stun-=dt;
     if(player.wheels&&elapsed>=(enemy.wheelReadyAt??0)&&skillCombat.wheelSweepsEnemy(enemy,wheelStart,wheelSweep,hitRadius)){
-      enemy.wheelReadyAt=elapsed+wheelCooldown;
-      skillCombat.damage(enemy,player.wheelDamage);player.wheelTimer=wheelCooldown;
+      player.wheelTimer=NezhaRules.relicCooldown(player,wheelCooldown);
+      enemy.wheelReadyAt=elapsed+player.wheelTimer;
+      skillCombat.wheelStrike(enemy,player.wheelDamage);
       if(elapsed>=player.attackUntil+.14)skillCombat.poseForAttack(enemy);
-      if(flameWheel&&enemy.hp>0&&elapsed>=(enemy.wheelKnockbackReadyAt??0)){
+      if(flameWheel&&enemy.hp>0&&!NezhaRules.isPetrified(enemy,elapsed)&&elapsed>=(enemy.wheelKnockbackReadyAt??0)){
         const [kx,ky]=unit(enemy.x-player.x,enemy.y-player.y);
         const force=enemy.name?24:55;
         enemy.x=clamp(enemy.x+kx*force,15,mapWidth-15);
@@ -1319,7 +1335,7 @@ function update(dt){
         enemy.wheelKnockbackReadyAt=elapsed+wheelKnockbackCooldown;
       }
     }
-    if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed)continue;
+    if(enemy.hp<=0||enemy.stun>0||enemy.knockedBackAt===elapsed||NezhaRules.isPetrified(enemy,elapsed))continue;
     const gap=distance(player,enemy);
     if(enemy.kind==='healer')healEnemyAllies(enemy,enemies);
     const followRange=enemy.kind==='caster'?175:enemy.kind==='healer'?100:enemy.r+12;
@@ -1335,7 +1351,7 @@ function update(dt){
   // Contact must match the settled positions that the player sees after knockback and separation.
   for(const enemy of enemies){
     if(towerFloor&&boss?.hp<=0)break;
-    if(enemy.hp<=0||enemy.stun>0||enemy.special||enemy.knockedBackAt===elapsed||distance(player,enemy)>enemy.r+16){
+    if(enemy.hp<=0||enemy.stun>0||enemy.special||enemy.knockedBackAt===elapsed||NezhaRules.isPetrified(enemy,elapsed)||distance(player,enemy)>enemy.r+16){
       enemy.nextContactHitAt=undefined;
     }else if(elapsed>=(enemy.nextContactHitAt??0)){
       hurt(enemyAttack(enemy),(enemy.name??'怪物')+'撞擊');
@@ -1344,7 +1360,7 @@ function update(dt){
   }
   if(!towerFloor||!(boss?.hp<=0))updateEnemyRanged(dt,fromX,fromY);
   updateTowerSpecial(fromX,fromY);
-  if(boss&&boss.hp>0&&boss.stun<=0&&!boss.special){
+  if(boss&&boss.hp>0&&boss.stun<=0&&!boss.special&&!NezhaRules.isPetrified(boss,elapsed)){
     boss.cast-=dt;
     if(boss.cast<=0){
       boss.cast=boss.interval*(1-.25*bossPressure());
@@ -1391,15 +1407,16 @@ function update(dt){
     kills++;
     if(towerFloor)floorKills++;
     if(mob.mini){
+      if(towerFloor)floorMiniKills++;
       gearRewards++;
-      if(Math.random()<miniBossChance)miniBossThreshold+=10;
+      if(towerFloor<NezhaRules.miniTowerFloor&&Math.random()<miniBossChance)miniBossThreshold+=10;
     }else smallKills++;
     dropLoot(mob,enemyXP(mob));
     return false;
   });
   if(player.hp<=0){finish(false);return;}
-  miniBossKills+=smallKills;
-  while(miniBossKills>=miniBossThreshold){
+  if(towerFloor<NezhaRules.miniTowerFloor)miniBossKills+=smallKills;
+  while(towerFloor<NezhaRules.miniTowerFloor&&miniBossKills>=miniBossThreshold){
     miniBossKills-=miniBossThreshold;
     if((towerFloor||(!boss&&mobs.length<storyMobLimit))&&Math.random()<miniBossChance)addMiniBoss();
   }
@@ -1427,7 +1444,7 @@ function update(dt){
       return;
     }
   }
-  if(towerFloor&&!boss&&floorKills>=towerGoal)spawnTowerGuardian();
+  if(towerFloor&&!boss&&towerProgress()>=NezhaRules.towerObjective(towerFloor).goal)spawnTowerGuardian();
   sparks=sparks.filter(s=>(s.life-=dt)>0);
   if(showGearReward())return;
   if(elapsed<nextRewardAt||(magnetEffect&&elapsed<magnetEffect.rewardAt))return;
@@ -1570,6 +1587,7 @@ function draw(){
   drawMagnetPull();
   for(const shot of enemyShots)drawEnemyShot(shot);
   const {x,y}=player;
+  if(NezhaRules.relicShield(player))NezhaWorldArt.relicShield(ctx,x,y);
   pixel(ctx,'#18292e88',Math.round(x)-12,Math.round(y)+3,24,7);
   const flying=player.moving&&mode==='play';
   const attacking=player.attackUntil>elapsed;
@@ -1582,7 +1600,8 @@ function draw(){
   for(const spark of sparks){
     if(spark.kind==='boss-area')combatArt.bossImpact(spark);
     else if(spark.kind==='boss-dash')combatArt.dashTrail(spark);
-    else if(spark.kind==='tome')NezhaWorldArt.tomePickup(ctx,spark);
+    else if(spark.kind==='relic-pickup')NezhaWorldArt.relicPickup(ctx,spark);
+    else if(spark.kind?.startsWith('relic-'))NezhaWorldArt.relicEffect(ctx,spark);
     else if(spark.kind==='boss-xp'){
       ctx.save();ctx.globalAlpha=Math.min(1,spark.life*2);
       ctx.textAlign='center';ctx.textBaseline='bottom';ctx.font='bold 20px system-ui';
@@ -1597,9 +1616,9 @@ function draw(){
     }else if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);
     else starShape(spark.x,spark.y,8+spark.life*35,'#fff1bf');
   }
+  NezhaWorldArt.relicGuide(ctx,view,drops.find(item=>NezhaRules.isTowerRelic(item.kind)));
   ctx.restore();
   if(mode==='play')drawPlayerHealth();
-  NezhaWorldArt.tomeGuide(ctx,view,drops.find(item=>item.kind==='tome'));
   if(stick){
     const size=Math.hypot(stick.dx,stick.dy),[sx,sy]=unit(stick.dx,stick.dy);
     circle(stick.x,stick.y,34,'#38244a66','#fff4db99');
@@ -1627,12 +1646,12 @@ function frame(now){
     update(dt);
   }
   draw();
-  showTowerLoot(mode==='play'&&towerBreak?NezhaRules.towerLootState(towerBreak.until-elapsed,drops.some(item=>item.kind==='tome')):null);
+  showTowerLoot(mode==='play'&&towerBreak?towerLootDisplay():null);
   const unlocked=unlockToastUntil>elapsed;
   if(unlockToast.hidden===unlocked)unlockToast.hidden=!unlocked;
   if(mode==='lobby')return;
   const requiredXP=needed();
-  hud.render({player,time,floor:towerFloor,floorKills,waveIndex:nextWave,
+  hud.render({player,time,floor:towerFloor,floorKills,floorMiniKills,waveIndex:nextWave,
     boss:boss?{name:boss.name,hp:boss.hp,maxHp:boss.maxHp,pressure:bossPressure()}:null,
     bossCast:boss?.special?.name??warnings.find(mark=>mark.name)?.name,
     kills,needed:requiredXP,ready:mode==='play'&&player.xp>=requiredXP?availableLevels():0});

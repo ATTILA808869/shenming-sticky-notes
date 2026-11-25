@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { GameError } from "./session";
+import rules from "./assets/battle-rules.js";
 
 const leaderboardLimit = 100;
 const rankOrder = [
@@ -66,7 +67,8 @@ export async function saveScore(data: Record<string, unknown>, accountId: string
   const { cleared, progress, kills } = data;
   if (typeof cleared !== "number" || typeof progress !== "number" || typeof kills !== "number" ||
       ![cleared, progress, kills].every(Number.isSafeInteger) || cleared < 1 || cleared > 10_000 ||
-      progress < 0 || progress > 1000 || kills < cleared * 1000 + progress || kills > 100_000_000) {
+      progress < 0 || progress > Math.max(1000, rules.towerObjective(cleared + 1).goal) ||
+      kills < rules.towerMinimumKills(cleared) + progress || kills > 100_000_000) {
     throw new GameError(400, "須至少通過無限塔第 1 層才能登錄成績。");
   }
 

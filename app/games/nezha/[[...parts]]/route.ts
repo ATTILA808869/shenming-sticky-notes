@@ -54,6 +54,14 @@ const assetTypes = {
   "skill-icon-fan.png": "image/png",
   "skill-icon-gourd.png": "image/png",
   "tower-tome.png": "image/png",
+  "tower-sword.png": "image/png",
+  "tower-bell.png": "image/png",
+  "tower-hourglass.png": "image/png",
+  "tower-stone.png": "image/png",
+  "loot-xp.png": "image/png",
+  "loot-bomb.png": "image/png",
+  "loot-magnet.png": "image/png",
+  "loot-heal.png": "image/png",
   "battle-ui.js": "application/javascript; charset=utf-8",
   "battle-ui.css": "text/css; charset=utf-8",
   "nezha.webp": "image/webp",
@@ -212,6 +220,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       case "skill-icon-fan.png":
       case "skill-icon-gourd.png":
       case "tower-tome.png":
+      case "tower-sword.png":
+      case "tower-bell.png":
+      case "tower-hourglass.png":
+      case "tower-stone.png":
+      case "loot-xp.png":
+      case "loot-bomb.png":
+      case "loot-magnet.png":
+      case "loot-heal.png":
       case "battle-ui.js":
       case "battle-ui.css":
         if ((await gameSession(request))?.account.nickname) return await asset(path);

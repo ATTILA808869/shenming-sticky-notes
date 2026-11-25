@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { GameError, limitAttempts } from "./session";
 import { saveScore } from "./scores";
+import rules from "./assets/battle-rules.js";
 
 export function battleConnection() {
   const secret = process.env.NEZHA_BATTLE_SECRET;
@@ -50,7 +51,7 @@ export async function saveBattleResult(accountId: string, value: unknown, publis
   const result = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
   const now = new Date();
   if (result.player !== accountId || !Number.isSafeInteger(result.expires) || result.expires < now.getTime() ||
-    ![result.cleared, result.kills].every(Number.isSafeInteger) || result.cleared < 0 || result.kills < result.cleared * 1000) throw invalid();
+    ![result.cleared, result.kills].every(Number.isSafeInteger) || result.cleared < 0 || result.kills < rules.towerMinimumKills(result.cleared)) throw invalid();
 
   await prisma.nezhaAccount.updateMany({
     where: { id: accountId, suspendedAt: null, jigongUnlockedAt: null },

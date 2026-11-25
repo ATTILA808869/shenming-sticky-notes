@@ -106,7 +106,7 @@ test("boss XP queues individual upgrades and each upgrade can be selected only o
   assert.equal(pendingReward(a).options.length, 7);
 });
 
-test("the tower guardian gives each eligible player a 15% tome roll", () => {
+test("tower guardian rolls 15% per relic for the team, waits for pickups, and shares them", () => {
   assert.equal(R.rollSkillTome({ skillTome: false }, 0, () => 0), false);
   assert.equal(R.rollSkillTome({ skillTome: true }, 1, () => 0), false);
   assert.equal(R.rollSkillTome({ skillTome: false }, 1, () => .15), false);
@@ -117,23 +117,32 @@ test("the tower guardian gives each eligible player a 15% tome roll", () => {
   room.floorKills = R.towerGoal;
   step(room);
   room.boss.hp = 0;
-  const rolls = [.149, .15];
-  room.random = () => rolls.shift() ?? .99;
+  const rolls = [.149, .15, .14, .15, .15];
+  let randomCalls = 0;
+  room.random = () => { randomCalls++; return rolls.shift() ?? .99; };
   step(room);
   const tome = room.loot.find(item => item.kind === "tome");
-  assert.equal(tome.ownerId, a.id);
+  const bell = room.loot.find(item => item.kind === "bell");
+  assert.deepEqual(room.loot.filter(item => R.isTowerRelic(item.kind)).map(item => item.kind), ["tome", "bell"]);
+  assert.equal(randomCalls, 6); // Five relic rolls and the guardian's ordinary drop roll.
   assert.deepEqual([a.skillTome, b.skillTome], [false, false]);
   assert.equal(room.cleared, 1);
-  assert.deepEqual(snapshot(room).lootBreak, { seconds: 5, tome: true });
+  assert.deepEqual(snapshot(room).lootBreak, { seconds: 5, tome: true, relic: true });
   room.loot.push({ kind: "magnet", x: a.x, y: a.y });
   step(room, 101);
   assert.equal(room.floor, 1);
-  assert.deepEqual(snapshot(room).lootBreak, { seconds: 0, tome: true });
+  assert.deepEqual(snapshot(room).lootBreak, { seconds: 0, tome: true, relic: true });
   assert.equal(a.skillTome, false);
   assert.ok(room.loot.includes(tome));
   b.x = tome.x; b.y = tome.y;
   step(room);
-  assert.deepEqual([a.skillTome, b.skillTome], [true, false]);
+  assert.deepEqual([a.skillTome, b.skillTome], [true, true]);
+  assert.equal(room.floor, 1);
+  assert.deepEqual(snapshot(room).lootBreak, { seconds: 0, tome: false, relic: true });
+  a.hp = 0;
+  b.x = bell.x; b.y = bell.y;
+  step(room);
+  assert.deepEqual(room.players.map(p => p.relics.bell), [{ remaining: 50, active: 0 }, { remaining: 50, active: 0 }]);
   assert.equal(room.floor, 2);
   assert.equal(snapshot(room).lootBreak, null);
 });
@@ -142,10 +151,13 @@ test("retiring from a scored round frees the teammate and prevents future credit
   const room = live(), [a, b] = room.players;
   room.floor = room.cleared = a.creditedFloor = b.creditedFloor = 1;
   room.lootUntil = room.time;
-  room.loot.push({ kind: "tome", ownerId: a.id, x: 900, y: 900 });
+  const tome = { kind: "tome", x: 900, y: 900 };
+  room.loot.push(tome);
   retirePlayer(room, a.id, 0);
   assert.equal(connect(room, a.id, 0), false);
   assert.equal(a.creditedFloor, 1);
+  assert.ok(room.loot.includes(tome)); // The pickup belongs to the team, not the departed player.
+  b.x = tome.x; b.y = tome.y;
   step(room);
   assert.equal(room.floor, 2);
   assert.equal(b.connected, true);
@@ -293,19 +305,84 @@ test("telegraphed caster seals track a fixed position and can be dodged or inter
   }
 });
 
-test("tower health and damage scale 15% per floor starting with floor five", () => {
+test("tower health and damage grow 25% per floor on the fixed baseline", () => {
   const testBoss = floor => {
     const room = live();
-    room.floor = floor; room.floorKills = R.towerGoal;
+    room.floor = floor; room.floorKills = R.towerObjective(floor).goal;
     room.baseline = R.enemyBalance(room.players[0], R.storyDuration, true);
     step(room);
     return room.boss;
   };
   const four = testBoss(4), five = testBoss(5), six = testBoss(6);
-  assert.ok(Math.abs(five.maxHp - four.maxHp * 1.15) <= 1);
-  assert.ok(Math.abs(six.maxHp - five.maxHp * 1.15) <= 1);
-  assert.ok(Math.abs(five.attack / four.attack - 1.15) < 1e-9);
-  assert.ok(Math.abs(six.attack / five.attack - 1.15) < 1e-9);
+  assert.equal(R.towerHealthBoost, 2.7);
+  assert.equal(R.towerStrength(2), 1.25);
+  assert.ok(Math.abs(five.maxHp - four.maxHp * 1.25) <= 1);
+  assert.ok(Math.abs(six.maxHp - five.maxHp * 1.25) <= 1);
+  assert.ok(Math.abs(five.attack / four.attack - 1.25) < 1e-9);
+  assert.ok(Math.abs(six.attack / five.attack - 1.25) < 1e-9);
+  assert.ok(five.speed > four.speed);
+  assert.ok(R.towerCrowd(20, 0, true).cap > R.towerCrowd(1, 0, true).cap);
+});
+
+test("floor 20 requires mini bosses instead of ordinary kills and spawns the last required mini", () => {
+  assert.deepEqual(R.towerObjective(1), { mini: false, goal: 1000 });
+  assert.deepEqual(R.towerObjective(19), { mini: false, goal: 1900 });
+  assert.deepEqual(R.towerObjective(21), { mini: true, goal: 101 });
+  const room = live();
+  room.floor = 20; room.floorKills = 3000; room.floorMiniKills = 99; room.nextSpawn = Infinity;
+  step(room);
+  assert.equal(room.boss, null);
+  assert.equal(snapshot(room).goal, 100);
+  assert.equal(snapshot(room).stageMiniKills, 99);
+  assert.equal(room.enemies.length, 1);
+  assert.equal(room.enemies[0].mini, true);
+  room.enemies[0].hp = 0;
+  step(room, 2);
+  assert.equal(room.floorMiniKills, 100);
+  assert.ok(room.boss?.guardian);
+});
+
+test("shared bell and stone trigger together and block damage and enemy actions", () => {
+  const room = live(), [a, b] = room.players;
+  room.floor = 1;
+  step(room, 8);
+  room.nextSpawn = Infinity;
+  const enemy = room.enemies[0];
+  enemy.x = a.x; enemy.y = a.y;
+  for (const kind of ["bell", "stone"]) room.loot.push({ kind, x: b.x, y: b.y });
+  step(room);
+  for (const p of room.players) for (const kind of ["bell", "stone"]) p.relics[kind].remaining = .05;
+  for (const p of room.players) p.qi.timer = 100;
+  const hp = a.hp, x = enemy.x, y = enemy.y;
+  step(room);
+  assert.deepEqual(room.players.map(R.relicShield), [true, true]);
+  assert.equal(R.isPetrified(enemy, room.time), true);
+  step(room, 19);
+  assert.deepEqual([enemy.x, enemy.y, a.hp], [x, y, hp]);
+  step(room, 2);
+  assert.equal(R.isPetrified(enemy, room.time), false);
+  assert.equal(a.hp, hp);
+  step(room, 41);
+  assert.deepEqual(room.players.map(R.relicShield), [false, false]);
+  step(room, 3);
+  assert.ok(a.hp < hp);
+});
+
+test("shared hourglass does not reduce basic qi cooldown, and sword echoes once at 30 percent", () => {
+  const p = R.createCharacter("nezha"), random = [ .2999, .30 ];
+  const combat = require("../../lib/nezha/assets/battle-combat.js").create(R, () => random.shift());
+  p.ringTimer = 2; p.qi.timer = .5;
+  assert.equal(R.grantRelic(p, "hourglass"), true);
+  assert.equal(R.grantRelic(p, "hourglass"), false);
+  assert.equal(p.ringTimer, 1.4);
+  assert.equal(p.qi.timer, .5);
+  R.grantRelic(p, "sword");
+  const enemy = { x: 0, y: 0, hp: 100 };
+  combat.frame(p, 0, 100, 100, null, []);
+  combat.wheelStrike(enemy, 10);
+  assert.equal(enemy.hp, 80);
+  combat.wheelStrike(enemy, 10);
+  assert.equal(enemy.hp, 70);
 });
 
 test("Jigong casts every learned relic and evolved wind, but cannot start another volley when down", () => {

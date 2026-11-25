@@ -21,7 +21,7 @@ function nearest(origin, list) {
 function createRoom(roster, now = Date.now(), random = Math.random) {
   return {
     state: "waiting", time: 0, storyTime: 0, nextBoss: 0, nextWave: 0, waveSlots: 0,
-    floor: 0, floorTime: 0, towerTime: 0, floorKills: 0, cleared: 0, kills: 0, graceUntil: 0,
+    floor: 0, floorTime: 0, towerTime: 0, floorKills: 0, floorMiniKills: 0, nextTowerMiniAt: 0, cleared: 0, kills: 0, graceUntil: 0,
     createdAt: now, vacantAt: now, nextId: 1, nextSpawn: .35, nextAim: 0, miniKills: 0, miniThreshold: 50,
     enemies: [], bolts: [], warnings: [], loot: [], sparks: [], boss: null, random,
     magnetFlights: [], magnetPulses: [], bombBursts: [], pickupNotice: null, lootUntil: null,
@@ -57,7 +57,6 @@ function retirePlayer(room, id, now = Date.now()) {
   if (!p?.connected) return;
   disconnect(room, id, now);
   p.retired = true;
-  room.loot = room.loot.filter(item => item.ownerId !== id);
 }
 
 function setInput(room, id, x, y) {
@@ -111,7 +110,7 @@ function heal(p, fraction) {
   if (p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * fraction);
 }
 function hurt(room, p, value) {
-  if (!available(p) || room.time < p.safeUntil) return;
+  if (!available(p) || room.time < p.safeUntil || R.relicShield(p)) return;
   p.hp = Math.max(0, p.hp - R.hitValue(value, p.defense));
   if (!p.hp) p.revive = 0;
 }
@@ -137,7 +136,7 @@ function combatBalance(room) {
     level: mean("level"), burst: mean("burst"), miniAttackScaling: room.miniThreshold > 50 };
 }
 function strengths(room, balance) {
-  const tower = room.floor ? R.towerFloorGrowth ** Math.max(0, room.floor - R.towerBaselineFloor) : 1;
+  const tower = R.towerStrength(room.floor);
   return { health: tower * (room.floor ? R.towerHealthBoost : 1),
     attack: balance.durability * tower * (room.floor ? R.towerDamageBoost : 1) };
 }
@@ -151,7 +150,8 @@ function spawnMob(room, p, balance, wave, kind, mini = false, angle) {
   const strength = strengths(room, balance);
   const stats = mini ? R.miniStats(R.miniTypes[Math.floor(room.random() * R.miniTypes.length)], balance, strength.health, strength.attack)
     : R.mobStats(kind, balance, wave, strength.health, strength.attack);
-  room.enemies.push({ ...stats, ...origin(room, p, mini ? 185 : 305 + room.random() * (wave ? 160 : 66), angle),
+  room.enemies.push({ ...stats, speed: stats.speed * R.towerMoveFactor(room.floor),
+    ...origin(room, p, mini ? 185 : 305 + room.random() * (wave ? 160 : 66), angle),
     id: room.nextId++, phase: room.random() * 6, stun: 0, flash: 0,
     contact: new Map(), wheels: new Map(), rangedReadyAt: room.time + 1.4 + room.random() * 2.2,
     abilityAt: room.time + 2 + room.random() * 3 });
@@ -165,18 +165,26 @@ function spawnBoss(room, p) {
   const attack = (room.floor ? 43 + floor * 7 + guardianTime * .04 : guardian.attack) * strength.attack;
   room.boss = { ...guardian, ...origin(room, p, 207), id: room.nextId++, guardian: true,
     kind: room.floor || guardian.at === R.storyDuration ? "dragon" : "boss",
-    r: room.floor ? 49 : guardian.r, speed: guardian.speed + floor * 2, hp, maxHp: hp, attack,
+    r: room.floor ? 49 : guardian.r, speed: (guardian.speed + floor * 2) * R.towerMoveFactor(room.floor), hp, maxHp: hp, attack,
     name: room.floor ? "第 " + room.floor + " 層・" + guardian.name : guardian.name,
     start: room.time, castAt: room.time + 2, cast: 0, flash: 0, stun: 0, contact: new Map(), wheels: new Map() };
   room.enemies.push(room.boss);
 }
 function spawns(room, living) {
   if (room.boss || room.time < room.graceUntil) return;
-  if (room.floor ? room.floorKills >= R.towerGoal : R.bossStages[room.nextBoss]?.at <= room.storyTime + 1e-8) {
+  const objective = R.towerObjective(room.floor);
+  if (room.floor ? (objective.mini ? room.floorMiniKills : room.floorKills) >= objective.goal
+    : R.bossStages[room.nextBoss]?.at <= room.storyTime + 1e-8) {
     spawnBoss(room, living[Math.floor(room.random() * living.length)]); return;
   }
-  const cap = room.floor ? 210 : 105;
+  const crowd = room.floor ? R.towerCrowd(room.floor, room.floorTime, true) : null;
+  const cap = crowd?.cap ?? 105;
   const balance = combatBalance(room);
+  if (objective.mini && room.time >= room.nextTowerMiniAt) {
+    const count = R.towerMiniWave(room.floor, room.floorMiniKills, room.enemies.filter(e => e.mini && e.hp > 0).length);
+    for (let i = 0; i < count; i++) spawnMob(room, living[(room.nextId + i) % living.length], balance, false, null, true);
+    room.nextTowerMiniAt = room.time + R.towerMiniInterval;
+  }
   const wave = !room.floor && R.storyWaves[room.nextWave];
   if (wave && room.storyTime >= wave.at) {
     const age = Math.min(room.storyTime - wave.at, wave.duration);
@@ -188,7 +196,7 @@ function spawns(room, living) {
     room.waveSlots = slots;
     if (age >= wave.duration) { room.nextWave++; room.waveSlots = 0; }
   } else if (room.time >= room.nextSpawn) {
-    const batch = room.floor ? Math.min(22, 14 + room.floor + Math.floor(room.floorTime / 70))
+    const batch = crowd ? crowd.batch
       : 1 + Math.floor(room.storyTime / 120) + (living.length === 2 && room.random() < .4 ? 1 : 0);
     const anchor = room.nextId;
     for (let i = 0; i < batch && room.enemies.length < cap; i++) {
@@ -221,9 +229,10 @@ function playerAttacks(room, dt) {
     const flaming = p.evolved[1], radius = R.wheelHitRadius * (flaming ? R.wheelEvolutionScale : 1);
     for (const e of room.enemies) {
       if (e.hp <= 0 || room.time < (e.wheels.get(p.id) ?? 0) || !combat.wheelSweepsEnemy(e, start, sweep, radius)) continue;
-      e.wheels.set(p.id, room.time + R.wheelCooldown); combat.damage(e, p.wheelDamage); p.wheelTimer = R.wheelCooldown;
+      p.wheelTimer = R.relicCooldown(p, R.wheelCooldown);
+      e.wheels.set(p.id, room.time + p.wheelTimer); combat.wheelStrike(e, p.wheelDamage);
       if (room.time >= p.attackUntil + .14) combat.poseForAttack(e);
-      if (flaming && e.hp > 0 && room.time >= (e.wheelKnockback ?? 0)) {
+      if (flaming && e.hp > 0 && !R.isPetrified(e, room.time) && room.time >= (e.wheelKnockback ?? 0)) {
         const d = gap(e, p) || 1, force = e.name ? 24 : 55;
         Object.assign(e, from(e.x + (e.x - p.x) * force / d, e.y + (e.y - p.y) * force / d));
         e.knockedBackAt = room.time; e.wheelKnockback = room.time + R.wheelKnockbackCooldown;
@@ -239,7 +248,7 @@ function moveEnemies(room, living, dt) {
   const grid = new Map();
   for (const e of room.enemies) {
     e.stun -= dt; e.flash -= dt;
-    if (e.hp <= 0 || e.stun > 0 || e.knockedBackAt === room.time) continue;
+    if (e.hp <= 0 || e.stun > 0 || e.knockedBackAt === room.time || R.isPetrified(e, room.time)) continue;
     const { target, distance } = nearest(e, living);
     if (!target) continue;
     if (e.kind === "healer" && room.time >= e.abilityAt) {
@@ -273,7 +282,7 @@ function moveEnemies(room, living, dt) {
     grid.get(cell).push(e);
   }
   for (const e of room.enemies) {
-    if (e.hp <= 0 || e.stun > 0 || e.special || e.knockedBackAt === room.time) { e.contact.clear(); continue; }
+    if (e.hp <= 0 || e.stun > 0 || e.special || e.knockedBackAt === room.time || R.isPetrified(e, room.time)) { e.contact.clear(); continue; }
     for (const p of living) {
       if (!available(p) || gap(p, e) > e.r + 16) e.contact.delete(p.id);
       else if (room.time >= (e.contact.get(p.id) ?? 0)) {
@@ -335,7 +344,7 @@ function enemyCasts(room, living, dt) {
   });
   let active = room.bolts.length, choice;
   for (const e of room.enemies) {
-    if (e.hp <= 0 || e.stun > 0 || e.knockedBackAt === room.time) {
+    if (e.hp <= 0 || e.stun > 0 || e.knockedBackAt === room.time || R.isPetrified(e, room.time)) {
       if (e.aim) { e.aim = null; e.rangedReadyAt = room.time + .85; }
       if (e.special) e.special = null;
       continue;
@@ -419,7 +428,7 @@ function activateMagnet(room, player, now) {
   const stride = Math.max(1, Math.ceil(room.loot.length / lootRules.maxMagnetFlights));
   let xp = 0, potions = 0, bombs = 0, arrival = 0;
   room.loot.forEach((item, i) => {
-    if (item.kind === "tome") return;
+    if (R.isTowerRelic(item.kind)) return;
     const duration = R.magnetFlightDuration(gap(item, player));
     if (item.kind === "xp") xp += item.value;
     if (item.kind === "heal") potions++;
@@ -429,7 +438,7 @@ function activateMagnet(room, player, now) {
         target: player.id, startedAt: Math.round(room.time * 1000) / 1000, duration: Math.round(duration * 1000) / 1000 });
     }
   });
-  room.loot = room.loot.filter(item => item.kind === "tome");
+  room.loot = room.loot.filter(item => R.isTowerRelic(item.kind));
   room.magnetFlights = room.magnetFlights.slice(-lootRules.maxMagnetFlights);
   room.magnetPulses.push({ target: player.id, startedAt: room.time });
   if (bombs) room.bombBursts.push({ player, count: bombs, at: room.time + arrival });
@@ -438,18 +447,17 @@ function activateMagnet(room, player, now) {
   room.pickupNotice = { kind: "magnet", until: room.time + 1.25 };
 }
 function collect(room, living, dt, now) {
-  let magnet, tomePickup, xp = 0, potions = 0;
+  let magnet, relicPickup, xp = 0, potions = 0;
   const bombs = new Map();
   room.loot = room.loot.filter(item => {
     const { target: p, distance } = nearest(item, living);
-    if (item.kind === "tome") {
-      const owner = room.players.find(player => player.id === item.ownerId);
-      if (!owner || !withinGrace(owner, now)) return false;
+    if (R.isTowerRelic(item.kind)) {
       if (!p || distance > R.tomePickupRadius) return true;
-      owner.skillTome = true;
-      if (owner.reward?.title === "升級強化") owner.reward = null;
-      tomePickup = { kind: "tome", player: owner.name, until: room.time + 2.4 };
-      room.sparks.push({ x: item.x, y: item.y, life: 1.4, r: 32, kind: "tome" });
+      for (const teammate of room.players.filter(member => withinGrace(member, now))) {
+        if (R.grantRelic(teammate, item.kind) && item.kind === "tome" && teammate.reward?.title === "升級強化") teammate.reward = null;
+      }
+      relicPickup = { kind: item.kind, until: room.time + 2.4 };
+      room.sparks.push({ x: item.x, y: item.y, life: 1.4, r: 32, kind: "relic-pickup", relic: item.kind });
       return false;
     }
     if (!p || distance >= lootRules.radius) return true;
@@ -475,7 +483,7 @@ function collect(room, living, dt, now) {
   });
   room.magnetPulses = room.magnetPulses.filter(pulse => room.time - pulse.startedAt < lootRules.magnetPulseTime);
   room.magnetFlights = room.magnetFlights.filter(flight => room.time - flight.startedAt < flight.duration);
-  if (tomePickup) room.pickupNotice = tomePickup;
+  if (relicPickup) room.pickupNotice = relicPickup;
 }
 function dropItem(room, e) {
   const kind = R.lootKind(room.random());
@@ -483,7 +491,8 @@ function dropItem(room, e) {
 }
 function enterFloor(room, now) {
   const first = room.floor === 0;
-  room.floor++; room.floorKills = 0; room.floorTime = 0; room.nextSpawn = room.time + (first ? 3 : .65);
+  room.floor++; room.floorKills = 0; room.floorMiniKills = 0; room.floorTime = 0;
+  room.nextSpawn = room.time + (first ? 3 : .65); room.nextTowerMiniAt = room.time + .8;
   room.lootUntil = null;
   room.graceUntil = room.nextSpawn; room.nextAim = room.time;
   if (room.floor === R.towerBaselineFloor) room.baseline = combatBalance(room);
@@ -507,8 +516,9 @@ function settle(room, now) {
     if (e.guardian) { guardian = e; return false; }
     if (room.floor) room.floorKills++;
     if (e.mini) {
+      if (room.floor) room.floorMiniKills++;
       for (const p of room.players) if (withinGrace(p, now)) p.gearRewards++;
-      if (room.random() < .30) room.miniThreshold += 10;
+      if (room.floor < R.miniTowerFloor && room.random() < .30) room.miniThreshold += 10;
     } else normalKills++;
     if (room.kills <= 5 || e.mini || room.random() < .90) {
       const seconds = room.baseline?.time ?? (room.floor ? R.storyDuration + room.towerTime : room.storyTime);
@@ -526,16 +536,15 @@ function settle(room, now) {
       addXP(room, p, (guardian.xp ?? 0) + remainingXP);
       if (room.floor) {
         p.creditedFloor = room.floor; p.creditedKills = room.kills;
-        if (R.rollSkillTome(p, room.floor, room.random)) {
-          const offset = p === room.players[0] ? -20 : 20;
-          room.loot.push({ ...from(guardian.x + offset, guardian.y, 38),
-            id: room.nextId++, kind: "tome", ownerId: p.id });
-        }
       }
     }
     if (room.floor) {
       room.cleared = room.floor;
       room.lootUntil = room.time + R.towerLootSeconds;
+      const team = room.players.filter(p => withinGrace(p, now));
+      for (const item of R.towerRelicDrops(team, room.floor, guardian, width, height, room.random)) {
+        room.loot.push({ ...item, id: room.nextId++ });
+      }
       room.enemies = [];
       for (const p of room.players) p.combat.reset();
       dropItem(room, guardian);
@@ -552,8 +561,8 @@ function settle(room, now) {
     const xp = overflow.reduce((sum, item) => sum + (item.kind === "xp" ? item.value : 0), 0);
     sharedXP(room, xp, now);
   }
-  room.miniKills += normalKills;
-  while (room.miniKills >= room.miniThreshold) {
+  if (room.floor < R.miniTowerFloor) room.miniKills += normalKills;
+  while (room.floor < R.miniTowerFloor && room.miniKills >= room.miniThreshold) {
     room.miniKills -= room.miniThreshold;
     const living = room.players.filter(available);
     if (!room.boss && living.length && (room.floor || room.enemies.length < 105) && room.random() < .30) {
@@ -561,6 +570,8 @@ function settle(room, now) {
     }
   }
 }
+const lootState = room => R.towerLootState(room.lootUntil - room.time, room.loot.some(item => item.kind === "tome"),
+  room.loot.some(item => item.kind !== "tome" && R.isTowerRelic(item.kind)));
 function tick(room, dt, now = Date.now()) {
   if ((room.vacantAt !== null && now - room.vacantAt >= graceMs) ||
     (room.state === "waiting" && now - room.createdAt >= 5 * 60_000)) room.state = "closed";
@@ -577,7 +588,7 @@ function tick(room, dt, now = Date.now()) {
     collect(room, room.players.filter(available), dt, now);
     room.sparks = room.sparks.filter(s => (s.life -= dt) > 0);
     for (const p of room.players) refreshReward(room, p);
-    if (R.towerLootState(room.lootUntil - room.time, room.loot.some(item => item.kind === "tome"))) return;
+    if (lootState(room)) return;
     // Preserve unclaimed shared XP using the cleared floor's level curve.
     sharedXP(room, room.loot.reduce((sum, item) => sum + (item.kind === "xp" ? item.value : 0), 0), now);
     enterFloor(room, now);
@@ -592,6 +603,15 @@ function tick(room, dt, now = Date.now()) {
   }
   movePlayers(room, living, dt);
   spawns(room, living);
+  let stoneTriggered = false;
+  for (const p of room.players) if (withinGrace(p, now)) R.advanceRelics(p, dt, (kind, duration) => {
+    if (kind === "stone") {
+      if (stoneTriggered) return;
+      R.petrifyEnemies(room.enemies, room.time, duration);
+      stoneTriggered = true;
+    }
+    if (available(p)) room.sparks.push({ x: p.x, y: p.y, life: .5, r: 40, kind: "relic-" + kind });
+  });
   playerAttacks(room, dt);
   if (room.floor && room.boss?.hp <= 0) {
     settle(room, now);
@@ -619,8 +639,8 @@ function pendingReward(p) {
 function snapshot(room) {
   const effects = [];
   const bolts = room.bolts.map(({ x, y, r, dx, dy, style }) => ({ x, y, r, dx, dy, style, hostile: true }));
-  const tome = room.loot.find(item => item.kind === "tome");
-  const lootBreak = room.lootUntil === null ? null : R.towerLootState(room.lootUntil - room.time, Boolean(tome));
+  const relicTarget = room.loot.find(item => R.isTowerRelic(item.kind));
+  const lootBreak = room.lootUntil === null ? null : lootState(room);
   const lane = room.boss?.special;
   for (const p of room.players) {
     const { targetedBolts, shots, jigongShots, jigongWindCasts, bricks, ingots } = p.combat.effects();
@@ -643,16 +663,17 @@ function snapshot(room) {
     state: room.state, width, height, stage: Math.min(3, Math.floor(room.storyTime / 150) + 1),
     time: Math.floor(room.time), clock: Math.round(room.time * 1000) / 1000, storyTime: Math.floor(room.storyTime + 1e-8),
     nextWave: room.nextWave, kills: room.kills,
-    floor: room.floor, cleared: room.cleared, stageKills: room.floorKills, goal: room.floor ? R.towerGoal : 480,
+    floor: room.floor, cleared: room.cleared, stageKills: room.floorKills, stageMiniKills: room.floorMiniKills,
+    goal: room.floor ? R.towerObjective(room.floor).goal : R.storyDuration,
     transitioning: room.time < room.graceUntil, reviveRadius, bolts, lootBreak,
-    tomeTarget: tome ? { x: tome.x, y: tome.y } : null,
+    tomeTarget: relicTarget ? { x: relicTarget.x, y: relicTarget.y, kind: relicTarget.kind } : null,
     bossLane: lane ? { pattern: lane.pattern, name: lane.name, x: lane.x, y: lane.y, angle: lane.angle, length: lane.length,
       r: lane.r, phase: lane.phase, charge: clamp((room.time-lane.started)/(lane.readyAt-lane.started), 0, 1) } : null,
     players: room.players.map(p => ({
       id: p.id, name: p.name, character: p.character, x: p.x, y: p.y, hp: Math.ceil(p.hp), maxHp: p.maxHp,
       xp: p.xp, needed: R.levelCost(p.level + 1, Boolean(room.floor)), level: p.level, connected: p.connected,
       attack: p.attack, defense: p.defense, speed: p.speed, gear: p.gear, skillLevels: p.skillLevels,
-      evolved: p.evolved, skillTome: p.skillTome, qi: p.qi, ringTimer: p.ringTimer, wheelTimer: p.wheelTimer, brickTimer: p.brickTimer,
+      evolved: p.evolved, skillTome: p.skillTome, relics: p.relics, qi: p.qi, ringTimer: p.ringTimer, wheelTimer: p.wheelTimer, brickTimer: p.brickTimer,
       jigong: p.jigong.map(({ cooldown, timer }) => ({ cooldown, timer })),
       revive: p.revive / reviveSeconds, protected: room.time < p.safeUntil, tome: p.skillTome,
       moving: Boolean(p.dx || p.dy), facing: p.facing, attackFacing: p.attackFacing,
@@ -662,7 +683,7 @@ function snapshot(room) {
       id: e.id, x: e.x, y: e.y, hp: Math.ceil(e.hp), maxHp: e.maxHp, radius: e.r, guardian: Boolean(e.guardian),
       name: e.name, kind: e.mini ? "mini" : e.kind, color: e.color, flash: e.flash > 0, phase: e.phase, facing: e.facing,
       ...(e.guardian ? { casting: Boolean(e.special) || e.castAt - room.time < .28, pressure: clamp((room.time - e.start - 25) / 50, 0, 1) } : {}),
-      ...(e.stun > 0 ? { stun: true } : {}), jigongSlowUntil: e.jigongSlowUntil, jigongWaterUntil: e.jigongWaterUntil,
+      ...(e.stun > 0 ? { stun: true } : {}), petrifiedUntil: e.petrifiedUntil, jigongSlowUntil: e.jigongSlowUntil, jigongWaterUntil: e.jigongWaterUntil,
       healFlashUntil: e.healFlashUntil, aim: e.aim ? { dx: e.aim.dx, dy: e.aim.dy, range: e.aim.profile.range + 24 + Math.min(12, e.r),
         ...(e.aim.profile.seal ? { seal: { x: e.aim.x, y: e.aim.y, r: e.aim.profile.radius } } : {}),
         charge: clamp((room.time - e.aim.start) / (e.aim.until - e.aim.start), 0, 1) } : null
