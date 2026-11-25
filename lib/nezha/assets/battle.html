@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" class="playing coop">
+<html lang="zh-Hant" class="playing coop match-input">
 <meta charset="utf-8">
 <meta name="nezha-revision" content="__NEZHA_REVISION__">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -24,7 +24,7 @@
 <p id="link-state" class="coop-notice" role="status">連接戰鬥房間中…</p>
 <p id="score-status" class="coop-notice" hidden></p>
 <div id="upgrade-panel" class="overlay coop-upgrade" hidden>
-  <div class="card" aria-labelledby="upgrade-title">
+  <div class="card" aria-labelledby="upgrade-title" data-match-scroll>
     <h1 id="upgrade-title"></h1><p id="upgrade-detail"></p>
     <div id="upgrade-options" class="actions level-up-actions"></div>
     <button class="close-upgrade" id="upgrade-close" type="button">收起</button>
@@ -42,7 +42,7 @@
   <span id="score"></span><button id="spendXP" type="button" aria-controls="upgrade-panel" aria-expanded="false" disabled>升級</button>
 </div></footer>
 </main>
-<dialog id="room-menu" class="card coop-menu" aria-labelledby="room-menu-title">
+<dialog id="room-menu" class="card coop-menu" aria-labelledby="room-menu-title" data-match-scroll>
   <h1 id="room-menu-title">雙人守廟埕</h1><p id="room-menu-status">線上戰鬥不會暫停。</p>
   <div class="actions">
     <button id="continue-room" type="button">1　繼續遊戲</button>
@@ -53,7 +53,7 @@
   </div>
   <p id="settle-status" role="status" hidden></p>
 </dialog>
-<dialog id="update-log" class="update-log" aria-labelledby="update-title">
+<dialog id="update-log" class="update-log" aria-labelledby="update-title" data-match-scroll>
   <header><h2 id="update-title">更新日誌</h2><form method="dialog"><button type="submit">關閉</button></form></header>
   <div id="update-entries"></div>
 </dialog>

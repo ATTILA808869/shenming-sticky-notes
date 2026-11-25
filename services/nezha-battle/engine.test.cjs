@@ -471,6 +471,35 @@ test("Jigong casts every learned relic and evolved wind, but cannot start anothe
   assert.equal(combat.effects().jigongShots.length, 0);
 });
 
+test("dense Jigong collisions match small groups, including wide, piercing and returning hits", () => {
+  const Combat = require("../../lib/nezha/assets/battle-combat.js");
+  function simulate(dense) {
+    const p = { ...R.createCharacter("jigong"), x: 335, y: 340, facing: 1 };
+    p.skillTome = true;
+    for (let i = 0; i < 3; i++) {
+      R.learnSkill(p, i, 0, "damage");
+      p.jigong[i].count = [20, 16, 25][i];
+      p.evolved[i] = true;
+    }
+    const targets = Array.from({ length: 27 }, (_, i) => ({
+      x: 140 + (i % 9) * 51, y: 239 + Math.floor(i / 9) * 106,
+      hp: 1500, maxHp: 1500, r: i % 3 === 0 ? 49 : 15, speed: 100
+    }));
+    const enemies = dense ? [...targets, ...Array.from({ length: 20 }, (_, i) => (
+      { x: 1900 + i * 22, y: 1950, r: 30, hp: 1500, speed: 100 }
+    ))] : targets;
+    const combat = Combat.create(R, () => .99);
+    for(let frame=0;frame<200;frame++){
+      combat.frame(p, frame*.05, 2880, 2160, null, []);
+      combat.updateSkills(.05, enemies);
+      combat.advanceJigongWind(.05, enemies);
+    }
+    assert.ok(targets.some(e => e.hp < 1500));
+    return targets;
+  }
+  assert.deepEqual(simulate(true), simulate(false));
+});
+
 test("a contested pickup credits XP once per teammate and healing is synchronized without reviving", () => {
   const room = live(), [a, b] = room.players;
   room.nextSpawn = Infinity;

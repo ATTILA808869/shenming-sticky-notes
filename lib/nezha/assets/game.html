@@ -18,7 +18,7 @@
 <div class="bossbar" id="bossbar" hidden><span id="bossname"></span><progress id="bossHP" aria-label="魔王血量"></progress></div>
 <progress id="xp" aria-label="升級進度"></progress>
 <div id="unlock-toast" class="unlock-toast" role="status" hidden>濟公禪師已解鎖！</div>
-<div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+<div class="overlay" id="overlay" data-match-scroll><div class="card" id="card"></div></div>
 </div>
 <section class="skills" aria-label="氣功、法寶與冷卻時間">
 <div class="skill"><strong></strong><small></small><progress max="1" aria-label="基礎氣功冷卻"></progress></div>
@@ -29,7 +29,7 @@
 <div id="gear" aria-label="強化道具"></div>
 <footer class="hint"><span class="controls">WASD／方向鍵移動・數字鍵選擇</span><div class="xp-summary"><span id="score"></span><button id="spendXP" type="button" disabled>升級</button></div></footer>
 </main>
-<dialog id="update-log" class="update-log" aria-labelledby="update-title">
+<dialog id="update-log" class="update-log" aria-labelledby="update-title" data-match-scroll>
   <header><h2 id="update-title">更新日誌</h2><form method="dialog"><button type="submit">關閉</button></form></header>
   <div id="update-entries"></div>
 </dialog>
@@ -44,6 +44,7 @@
 const canvas = document.querySelector('#arena');
 const ctx = canvas.getContext('2d');
 const combatArt=NezhaCombatArt.create(ctx);
+const setBattleGestures=NezhaUi.mountBattleGestures(document);
 const playerSprite=document.querySelector('#player-sprite');
 const spriteCtx=playerSprite.getContext('2d');
 const unlockToast=document.querySelector('#unlock-toast');
@@ -164,6 +165,7 @@ function reset(){
 function setMode(next){
   if(mode==='lobby'&&next!=='lobby'){closeLobby?.();closeLobby=null;}
   mode=next; overlay.hidden=next==='play'; pause.disabled=next!=='play';
+  setBattleGestures(next==='play'||next==='upgrade'||next==='paused'||next==='settling');
   document.documentElement.classList.toggle('playing',next==='play');
   document.documentElement.classList.toggle('lobby',next==='lobby');
   card.classList.toggle('lobby-hub',next==='lobby');
@@ -289,9 +291,6 @@ document.addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
 window.addEventListener('blur',()=>{keys.clear();releaseStick();pinch=null;});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode==='play')togglePause();});
 window.addEventListener('pagehide',()=>{if(mode==='play')togglePause();});
-document.addEventListener('touchmove',event=>{
-  if(mode==='play'&&event.cancelable)event.preventDefault();
-},{passive:false});
 canvas.addEventListener('contextmenu',event=>{if(mode==='play')event.preventDefault();});
 function releaseStick(pointerId=stick?.id){
   if(!stick||stick.id!==pointerId)return;
@@ -353,9 +352,6 @@ function handleArenaTouch(event){
 for(const name of ['touchstart','touchmove','touchend','touchcancel']){
   canvas.addEventListener(name,handleArenaTouch,{passive:false});
 }
-for(const name of ['gesturestart','gesturechange'])canvas.addEventListener(name,event=>{
-  if(mode==='play'&&event.cancelable)event.preventDefault();
-},{passive:false});
 function wheelPoints(){
   return Array.from({length:player.wheels},(_,i)=>NezhaRules.wheelPoint(player,i));
 }
@@ -1152,11 +1148,13 @@ function updateEnemyRanged(dt,fromX,fromY){
   nextEnemyAimAt=elapsed+(!towerFloor&&time<60?1:.65);
 }
 function attract(item,dt,radius,speed){
-  const gap=distance(item,player);
-  if(gap>=radius||gap===0)return;
+  const dx=player.x-item.x,dy=player.y-item.y,gapSq=dx*dx+dy*dy;
+  if(gapSq>=radius*radius||!gapSq)return gapSq;
+  const gap=Math.sqrt(gapSq);
   const step=Math.min(gap,speed*dt);
-  item.x+=(player.x-item.x)*step/gap;
-  item.y+=(player.y-item.y)*step/gap;
+  item.x+=dx*step/gap;
+  item.y+=dy*step/gap;
+  return (gap-step)**2;
 }
 function activateMagnet(){
   const flights=[];
@@ -1220,8 +1218,7 @@ function collectLoot(dt){
       sparks.push({x:drop.x,y:drop.y,life:1.4,r:32,kind:'relic-pickup',relic:drop.kind});
       return false;
     }
-    attract(drop,dt,pickupRadius,240);
-    if(distance(drop,player)>=25)return true;
+    if(attract(drop,dt,pickupRadius,240)>=25**2)return true;
     if(drop.kind==='magnet')magnetCollected=true;
     else if(drop.kind==='heal')heal(NezhaRules.loot.healFraction);
     else if(drop.kind==='bomb')bombs++;
@@ -1233,8 +1230,7 @@ function collectLoot(dt){
     return;
   }
   stars=stars.filter(star=>{
-    attract(star,dt,pickupRadius,330);
-    if(distance(star,player)>=22)return true;
+    if(attract(star,dt,pickupRadius,330)>=22**2)return true;
     player.xp+=star.value;
     return false;
   });
@@ -1562,9 +1558,11 @@ function draw(){
   view.width=width/viewZoom;view.height=height/viewZoom;
   centerCamera(view,view.width,view.height);
   ctx.save();ctx.scale(viewZoom,viewZoom);ctx.translate(-view.x,-view.y);
+  const visible=(item,margin)=>NezhaWorldArt.visibleIn(view,item,margin);
   background();
   if(jigongWindCasts.length)drawJigongWindEyes(jigongWindCasts);
   for(const mark of warnings){
+    if(!visible(mark,mark.r+40))continue;
     const charge=clamp(1-mark.life/mark.duration,0,1);
     if(mark.pattern)combatArt.bossWarning(mark,charge);
     else drawGroundWarning(mark.x,mark.y,mark.r,charge);
@@ -1573,23 +1571,23 @@ function draw(){
     const lane=boss.special;
     combatArt.bossLane({...lane,charge:clamp((elapsed-lane.started)/(lane.readyAt-lane.started),0,1)});
   }
-  for(const mob of mobs)if(mob.aim)drawEnemyAim(mob);
-  for(const star of stars)drawXpGem(star.x,star.y);
-  for(const drop of drops)drawLootDrop(drop.x,drop.y,drop.kind);
-  for(const ingot of ingots)combatArt.ingot(ingot.x,ingot.y);
+  for(const mob of mobs)if(mob.aim&&visible(mob,mob.aim.profile.range+100))drawEnemyAim(mob);
+  for(const star of stars)if(visible(star,12))drawXpGem(star.x,star.y);
+  for(const drop of drops)if(visible(drop,55))drawLootDrop(drop.x,drop.y,drop.kind);
+  for(const ingot of ingots)if(visible(ingot,42))combatArt.ingot(ingot.x,ingot.y);
   for(const mob of mobs){
-    if(mob.x<view.x-65||mob.x>view.x+view.width+65||mob.y<view.y-65||mob.y>view.y+view.height+65)continue;
+    if(!visible(mob,65))continue;
     ghost(mob);
   }
-  if(boss)ghost(boss);
-  for(const bolt of targetedBolts)drawTargetedBolt(bolt);
+  if(boss&&visible(boss,160))ghost(boss);
+  for(const bolt of targetedBolts)if(visible(bolt,42))drawTargetedBolt(bolt);
   for(const shot of jigongShots)drawJigongShot(shot);
-  for(const shot of shots)if(shot.lag<=0)combatArt.ring(shot,elapsed);
+  for(const shot of shots)if(shot.lag<=0&&visible(shot,80))combatArt.ring(shot,elapsed);
   const wheelScale=player.wheels&&player.evolved[1]?wheelEvolutionScale:1;
   for(const wheel of wheelPoints())combatArt.wheel(wheel,wheelScale);
   for(const brick of bricks)combatArt.brick(brick);
   drawMagnetPull();
-  for(const shot of enemyShots)drawEnemyShot(shot);
+  for(const shot of enemyShots)if(visible(shot,65))drawEnemyShot(shot);
   const {x,y}=player;
   if(NezhaRules.relicShield(player))NezhaWorldArt.relicShield(ctx,x,y);
   pixel(ctx,'#18292e88',Math.round(x)-12,Math.round(y)+3,24,7);
@@ -1602,6 +1600,7 @@ function draw(){
     drawPlayerSprite(pose,x,y+7+hover,attacking?player.attackFacing:player.facing);
   }
   for(const spark of sparks){
+    if(!visible(spark,Math.max(100,(spark.r??0)+34)))continue;
     if(spark.kind==='boss-area')combatArt.bossImpact(spark);
     else if(spark.kind==='boss-dash')combatArt.dashTrail(spark);
     else if(spark.kind==='relic-pickup')NezhaWorldArt.relicPickup(ctx,spark);
@@ -1635,7 +1634,7 @@ const showTowerLoot=NezhaUi.mountTowerLoot(document);
 const {setText}=NezhaUi;
 hud.spend.onclick=spendSavedXP;
 NezhaUi.mountUpdateLog(document,()=>{if(mode==='play')togglePause();});
-let previous=null,framePending=false;
+let previous=null,framePending=false,lastHudAt=-Infinity,lastHudMode;
 NezhaSkillArt.onReady(requestFrame);
 function requestFrame(){
   if(framePending)return;
@@ -1653,12 +1652,15 @@ function frame(now){
   showTowerLoot(mode==='play'&&towerBreak?towerLootDisplay():null);
   const unlocked=unlockToastUntil>elapsed;
   if(unlockToast.hidden===unlocked)unlockToast.hidden=!unlocked;
-  if(mode==='lobby')return;
-  const requiredXP=needed();
-  hud.render({player,time,floor:towerFloor,floorKills,floorMiniKills,waveIndex:nextWave,
-    boss:boss?{name:boss.name,hp:boss.hp,maxHp:boss.maxHp,pressure:bossPressure()}:null,
-    bossCast:boss?.special?.name??warnings.find(mark=>mark.name)?.name,
-    kills,needed:requiredXP,ready:mode==='play'&&player.xp>=requiredXP?availableLevels():0});
+  if(mode!=='lobby'&&(mode!=='play'||lastHudMode!==mode||now-lastHudAt>=80)){
+    lastHudAt=now;
+    const requiredXP=needed();
+    hud.render({player,time,floor:towerFloor,floorKills,floorMiniKills,waveIndex:nextWave,
+      boss:boss?{name:boss.name,hp:boss.hp,maxHp:boss.maxHp,pressure:bossPressure()}:null,
+      bossCast:boss?.special?.name??warnings.find(mark=>mark.name)?.name,
+      kills,needed:requiredXP,ready:mode==='play'&&player.xp>=requiredXP?availableLevels():0});
+  }
+  lastHudMode=mode;
   if(mode==='play')requestFrame();
 }
 resize();reset();setMode('loading');panel('神明Q仙傳','載入中…',[]);
