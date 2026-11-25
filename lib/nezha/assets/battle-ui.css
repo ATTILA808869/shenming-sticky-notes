@@ -29,7 +29,7 @@ canvas{width:100%;height:100%;display:block;touch-action:none;image-rendering:pi
 .hud-status{justify-self:start;min-width:0}
 .relic-hud{display:flex;gap:3px;margin-top:4px}
 .relic-hud[hidden]{display:none}
-.relic-hud>div{pointer-events:auto;position:relative;display:grid;place-items:center;width:31px;height:31px;background:#17252ff2;border:1px solid #9d8062;border-radius:2px;touch-action:none}
+.relic-hud>div{pointer-events:auto;position:relative;display:grid;place-items:center;width:34px;height:34px;background:#17252ff2;border:1px solid #9d8062;border-radius:2px;touch-action:none}
 .relic-hud img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
 .relic-hud small{position:absolute;right:0;bottom:0;padding:0 2px;background:#101b23e6;color:#fff0b9;font:700 9px/1.2 system-ui;font-variant-numeric:tabular-nums}
 .relic-hud .relic-active{border-color:#ffc466;background:#574437}
@@ -44,9 +44,26 @@ progress::-moz-progress-bar{background:var(--fill,var(--gold))}
 .tower-loot{position:absolute;inset:26% 12% auto;display:grid;justify-items:center;gap:2px;text-align:center;pointer-events:none;color:var(--gold)}
 .tower-loot span{font-size:15px;font-weight:800;padding:5px 9px;background:#17252ff5;border:1px solid #ad8d5e;border-radius:3px}
 .tower-loot strong{font-size:84px;line-height:1.05;font-weight:900;text-shadow:3px 4px #46281d,-2px -2px #17252f}
+.tower-loot-with-relics{inset:74px 8px auto auto;width:min(54%,200px);display:flex;align-items:center;justify-content:flex-end;gap:6px;text-align:right}
+.tower-loot-with-relics span{font-size:12px;padding:3px 6px}
+.tower-loot-with-relics strong{min-width:24px;font-size:42px;text-align:center}
 .tower-digit-enter{animation:tower-digit 960ms ease-out both}
+.game-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+.relic-drop-layer{position:absolute;inset:0;pointer-events:none;isolation:isolate}
+.relic-drop-marker,.relic-drop-pin,.relic-drop-leader{position:absolute;top:0;left:0}
+.relic-drop-marker{z-index:2;width:82px;height:70px;display:grid;grid-template-rows:44px auto;place-items:center;padding:3px 2px;border:1px solid #f5c668;border-radius:4px;background:#15252ff5;color:#fff0ba;box-shadow:0 0 0 2px #101921;text-align:center}
+.relic-drop-marker strong{font-size:13px;line-height:1;white-space:nowrap}
+.relic-drop-marker img,.relic-drop-list img{object-fit:contain;image-rendering:pixelated}
+.relic-drop-marker img{width:44px;height:44px}
+.relic-drop-offscreen::after{content:'↑';position:absolute;top:4px;right:4px;color:#ffe09a;font-size:18px;line-height:1;transform:rotate(var(--drop-direction,0deg))}
+.relic-drop-pin{z-index:1;width:16px;height:16px;border:2px solid #ffe096;border-radius:50%;background:#432611;box-shadow:0 0 0 2px #17252f}
+.relic-drop-leader{height:2px;background:#ffdc91;transform-origin:0 50%;box-shadow:0 1px #17252f}
+.relic-drop-list{position:absolute;inset:auto 6px 22px;display:flex;justify-content:center;flex-wrap:wrap;gap:4px;list-style:none;padding:0;margin:0;pointer-events:none}
+.relic-drop-list li{display:flex;align-items:center;gap:3px;padding:2px 4px;border:1px solid #ad8d5e;border-radius:3px;background:#17252ff5;color:#fff0ba;font-size:12px;font-weight:800;white-space:nowrap}
+.relic-drop-list img{width:23px;height:23px}
+.relic-drop-list i{width:12px;text-align:center;font-style:normal;font-size:15px;line-height:1}
 @keyframes tower-digit{0%{opacity:1;transform:scale(1.16)}56%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.88)}}
-@media(max-height:480px){.tower-loot strong{font-size:58px}}
+@media(max-height:480px){.tower-loot:not(.tower-loot-with-relics) strong{font-size:58px}}
 @media(prefers-reduced-motion:reduce){.tower-digit-enter{animation:none}}
 .overlay{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;display:grid;place-items:center;background:#0e1925a6;padding:10px}
 .card{width:min(430px,100%);padding:21px;text-align:center;background:#21343b;color:var(--ink);border:2px solid #e5ab65;box-shadow:0 0 0 3px #162126,0 8px #101b22;border-radius:4px;overflow-wrap:anywhere}
@@ -190,7 +207,8 @@ html.lobby .unlock-toast{display:none}
   .lobby-nav{grid-auto-flow:row;grid-template-columns:repeat(3,minmax(0,1fr))}
   .hud{inset-inline:6px;top:6px;grid-template-columns:minmax(0,max-content) 1fr auto}
   .hud #clock{justify-self:center}.hud span,.stats{padding:4px;font-size:11px}
-  .relic-hud>div{width:24px;height:24px}
+  .relic-hud{display:grid;grid-template-columns:repeat(3,30px)}
+  .relic-hud>div{width:30px;height:30px}
   .wave{top:35px;right:6px;font-size:10px}.bossbar{top:75px}
   .card{padding:13px}.card h1{font-size:23px}.skill{padding:4px}.skill strong{font-size:12px}
   .level-up-actions{gap:5px}.level-up-actions button{padding:5px 6px;font-size:12px}
@@ -232,7 +250,10 @@ html.lobby .unlock-toast{display:none}
 .coop-notice{position:absolute;inset:auto 12px 74px;margin:0;text-align:center;font-size:14px;font-weight:800;color:var(--gold);text-shadow:0 2px #101d25,0 0 5px #101d25;pointer-events:none}
 .coop-notice:empty{display:none}
 .coop #score-status{bottom:96px;color:var(--mint)}
-.coop-upgrade.overlay{pointer-events:none;background:#0e192558;overflow:hidden}
+.coop .relics-visible .team-status{bottom:85px}
+.coop .relics-visible #link-state{bottom:122px}
+.coop .relics-visible #score-status{bottom:144px}
+.coop-upgrade.overlay{z-index:1;pointer-events:none;background:#0e192558;overflow:hidden}
 .coop-upgrade .card{pointer-events:auto;max-height:100%;overflow:auto;overscroll-behavior:contain}
 .close-upgrade{margin-top:9px;padding:4px 13px;font-size:13px}
 .coop-menu::backdrop{background:#0e1925a6}

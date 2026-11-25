@@ -1,7 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { createRoom, connect, disconnect, retirePlayer, setInput, chooseReward, pendingReward, tick, snapshot, graceMs, reviveRadius } = require("./engine.cjs");
-const { signResult } = require("./server.cjs");
+const { signResult, playerView } = require("./server.cjs");
 const R = require("../../lib/nezha/assets/battle-rules.js");
 const team = [{ id: "leader", name: "Leader", character: "nezha" }, { id: "guest", name: "Guest", character: "jigong" }];
 const step = (room, frames = 1) => {
@@ -145,6 +145,19 @@ test("tower guardian rolls 15% per relic for the team, waits for pickups, and sh
   assert.deepEqual(room.players.map(p => p.relics.bell), [{ remaining: 50, active: 0 }, { remaining: 50, active: 0 }]);
   assert.equal(room.floor, 2);
   assert.equal(snapshot(room).lootBreak, null);
+});
+
+test("co-op sends every rare drop even when normal loot fills the packet or teammates are far away", () => {
+  const room = live(), [leader, guest] = room.players;
+  Object.assign(leader, { x: 100, y: 100 });
+  Object.assign(guest, { x: 2500, y: 2000 });
+  const kinds = ["tome", "sword", "bell", "hourglass", "stone"];
+  room.loot = kinds.map((kind, index) => ({ x: 120 + index * 60, y: 120, kind, id: index + 2 }));
+  for (let i = 0; i < 350; i++) room.loot.push({ id: 20 + i, x: 160, y: 180, kind: "xp" });
+  const world = snapshot(room), nearby = playerView(world, leader), far = playerView(world, guest);
+  assert.equal(nearby.loot.filter(item => item.kind === "xp").length, 280);
+  assert.deepEqual(nearby.loot.filter(item => R.isTowerRelic(item.kind)).map(item => item.kind), kinds);
+  assert.deepEqual(far.loot.map(item => item.kind), kinds);
 });
 
 test("retiring from a scored round frees the teammate and prevents future credits for the departing player", () => {

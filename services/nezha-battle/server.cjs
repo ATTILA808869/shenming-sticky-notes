@@ -1,6 +1,7 @@
 const { createHmac, timingSafeEqual } = require("node:crypto");
 const { createServer } = require("node:http");
 const { createRoom, connect, disconnect, retirePlayer, setInput, chooseReward, pendingReward, tick, snapshot } = require("./engine.cjs");
+const { isTowerRelic } = require("../../lib/nezha/assets/battle-rules.js");
 
 function signResult(secret, p, now = Date.now()) {
   if (!p?.enteredTower) return null;
@@ -13,8 +14,13 @@ function signResult(secret, p, now = Date.now()) {
 
 function playerView(base, p) {
   const visible = item => Math.abs(item.x - p.x) <= 880 && Math.abs(item.y - p.y) <= 820;
+  const nearbyLoot = [], relics = [];
+  for (const item of base.loot) {
+    if (isTowerRelic(item.kind)) relics.push(item);
+    else if (visible(item)) nearbyLoot.push(item);
+  }
   return { ...base, enemies: base.enemies.filter(e => e.guardian || visible(e)),
-    bolts: base.bolts.filter(visible), loot: base.loot.filter(visible).slice(-280), effects: base.effects.filter(visible),
+    bolts: base.bolts.filter(visible), loot: [...nearbyLoot.slice(-280), ...relics], effects: base.effects.filter(visible),
     sparks: base.sparks.filter(s => s.kind === "bomb" || visible(s)), reward: pendingReward(p) };
 }
 
@@ -146,4 +152,4 @@ if (require.main === module) {
   http.on("listening", () => console.log("Nezha battle listening on port " + http.address().port));
 }
 
-module.exports = { verifyTicket, signResult, startBattleServer };
+module.exports = { verifyTicket, signResult, startBattleServer, playerView };

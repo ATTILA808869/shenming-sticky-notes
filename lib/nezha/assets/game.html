@@ -1520,7 +1520,7 @@ function ghost(enemy){
   combatArt.enemyActor(enemy,elapsed,kind,isBoss);
 }
 function drawXpGem(x,y){NezhaWorldArt.gem(ctx,x,y);}
-function drawLootDrop(x,y,kind){NezhaWorldArt.drop(ctx,x,y,kind,elapsed);}
+function drawLootDrop(x,y,kind){NezhaWorldArt.drop(ctx,x,y,kind);}
 function drawMagnetPull(){
   if(magnetEffect)NezhaWorldArt.magnet(ctx,view,elapsed,[magnetEffect],magnetEffect.flights,()=>player,magnetPulseTime);
 }
@@ -1573,7 +1573,7 @@ function draw(){
   }
   for(const mob of mobs)if(mob.aim&&visible(mob,mob.aim.profile.range+100))drawEnemyAim(mob);
   for(const star of stars)if(visible(star,12))drawXpGem(star.x,star.y);
-  for(const drop of drops)if(visible(drop,55))drawLootDrop(drop.x,drop.y,drop.kind);
+  for(const drop of drops)if(!NezhaRules.isTowerRelic(drop.kind)&&visible(drop,55))drawLootDrop(drop.x,drop.y,drop.kind);
   for(const ingot of ingots)if(visible(ingot,42))combatArt.ingot(ingot.x,ingot.y);
   for(const mob of mobs){
     if(!visible(mob,65))continue;
@@ -1619,7 +1619,6 @@ function draw(){
     }else if(spark.r>10)circle(spark.x,spark.y,spark.r,null,'#ffdb8ba8',3);
     else starShape(spark.x,spark.y,8+spark.life*35,'#fff1bf');
   }
-  NezhaWorldArt.relicGuide(ctx,view,drops.find(item=>NezhaRules.isTowerRelic(item.kind)));
   ctx.restore();
   if(mode==='play')drawPlayerHealth();
   if(stick){
@@ -1631,6 +1630,7 @@ function draw(){
 const hud=NezhaUi.mountHud(document,NezhaRules);
 NezhaUi.mountReleaseNotice(document);
 const showTowerLoot=NezhaUi.mountTowerLoot(document);
+const showRelicDrops=NezhaUi.mountRelicDrops(document,NezhaRules);
 const {setText}=NezhaUi;
 hud.spend.onclick=spendSavedXP;
 NezhaUi.mountUpdateLog(document,()=>{if(mode==='play')togglePause();});
@@ -1649,7 +1649,12 @@ function frame(now){
     update(dt);
   }
   draw();
-  showTowerLoot(mode==='play'&&towerBreak?towerLootDisplay():null);
+  const looting=mode==='play'&&towerBreak;
+  showTowerLoot(looting?towerLootDisplay():null);
+  if(looting){
+    showRelicDrops(drops.filter(item=>NezhaRules.isTowerRelic(item.kind)),
+      {width,height,scale:viewZoom,offsetX:-view.x*viewZoom,offsetY:-view.y*viewZoom},player);
+  }else showRelicDrops([]);
   const unlocked=unlockToastUntil>elapsed;
   if(unlockToast.hidden===unlocked)unlockToast.hidden=!unlocked;
   if(mode!=='lobby'&&(mode!=='play'||lastHudMode!==mode||now-lastHudAt>=80)){
